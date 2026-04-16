@@ -2,7 +2,6 @@ package rtu
 
 import (
 	"encoding/asn1"
-	"errors"
 )
 
 type Version int32
@@ -16,7 +15,7 @@ func (v Version) Parse(payload []byte, withValidation bool) (*Payload, error) {
 	// get generator for the structure of this version
 	parser, ok := parserRegistry[v]
 	if !ok {
-		return nil, errors.New("invalid version")
+		return nil, ErrUnknownVersion
 	}
 	// get new variable of the correct type
 	raw, err := parser(payload)
@@ -37,7 +36,7 @@ func (v Version) Make(payload *Payload) ([]byte, error) {
 	// get version object builder
 	builder, ok := builderRegistry[v]
 	if !ok {
-		return nil, errors.New("invalid version")
+		return nil, ErrUnknownVersion
 	}
 	// generate payload object for this version from *Payload
 	raw, err := builder(payload)

@@ -14,6 +14,7 @@ var (
 	ErrSigning                   = errors.New("signing error")
 	ErrSignatureInvalid          = errors.New("signature invalid")
 	ErrKeyInvalid                = errors.New("invalid key")
+	ErrUnknownVersion            = errors.New("unknown version")
 )
 
 // ValidationError carries per-field details

@@ -9,21 +9,21 @@ import (
 	rtu "github.com/MyNextID/ioss-rtu-go-sdk"
 )
 
-func generateCPK(t *testing.T) (*ecdsa.PrivateKey, rtu.CPK) {
+func generatePrivateKey(t *testing.T) *ecdsa.PrivateKey {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cpk := rtu.CPK(elliptic.MarshalCompressed(priv.Curve, priv.PublicKey.X, priv.PublicKey.Y))
-	return priv, cpk
+	return priv
 }
 
-func TestNewCPK(t *testing.T) {
-	generateCPK(t)
+func generateCPK(priv *ecdsa.PrivateKey, t *testing.T) rtu.CPK {
+	return elliptic.MarshalCompressed(priv.Curve, priv.PublicKey.X, priv.PublicKey.Y)
 }
 
 func TestCPK_Parse(t *testing.T) {
-	priv, cpk := generateCPK(t)
+	priv := generatePrivateKey(t)
+	cpk := generateCPK(priv, t)
 	pub, err := cpk.Parse(rtu.AlgorithmEcdsaP256)
 	if err != nil {
 		t.Fatal(err)

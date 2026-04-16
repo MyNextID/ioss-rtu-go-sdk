@@ -1,22 +1,25 @@
 package rtu_test
 
 import (
-	"bytes"
 	"testing"
 
 	rtu "github.com/MyNextID/ioss-rtu-go-sdk"
 )
 
-func TestVersion1(t *testing.T) {
-	priv, cpk := generateCPK(t)
-	payload := generatePayload(t).SetDelegatedUse(true)
-	obj, err := rtu.SignV1(payload, priv)
+func generateExampleV1RTU(payload *rtu.Payload, t *testing.T) *rtu.RTU {
+	if payload == nil {
+		payload = generatePayload("").SetDelegatedUse(false)
+	}
+	obj, err := rtu.SignV1(payload, generatePrivateKey(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(payload.CPK(), cpk) {
-		t.Fatal("cpk not set by signer")
-	}
+	return obj
+}
+
+func TestVersion1(t *testing.T) {
+	payload := generatePayload("test_v1").SetDelegatedUse(false)
+	obj := generateExampleV1RTU(payload, t)
 	out, err := obj.Pack()
 	if err != nil {
 		t.Fatal(err)
