@@ -6,6 +6,9 @@ import (
 	"fmt"
 )
 
+// RTU is the final signed structure of every Import One-Stop Shop Right To Use (IOSS-RTU) token.
+// Payload is parsed based on Version in this object. Signature and Payload.CPK are defined by Algorithm.
+// If there is no Algorithm, the default SignatureAlgorithm of the given Version is used.
 type RTU struct {
 	// ContentType is the type of this signed rtu (schema id). It determines what type of payload we should expect
 	Version Version `json:"version" asn1:""`
@@ -17,8 +20,10 @@ type RTU struct {
 	Algorithm SignatureAlgorithm `json:"algorithm" asn1:",utf8,optional"`
 }
 
+// GetSignatureAlgorithm returns the valid SignatureAlgorithm for this RTU. If Algorithm == AlgorithmNone,
+// then the Version's default algorithm should have been used
 func (r *RTU) GetSignatureAlgorithm() SignatureAlgorithm {
-	if r.Algorithm == "" {
+	if r.Algorithm == AlgorithmNone {
 		return r.Version.DefaultSignatureAlgorithm()
 	}
 	return r.Algorithm
@@ -53,6 +58,7 @@ func (r *RTU) Parse(withValidations bool) (*Payload, error) {
 	return out, nil
 }
 
+// Raw encodes RTU into an ASN.1 DER encoded byte array (RawRTU)
 func (r *RTU) Raw() (RawRTU, error) {
 	der, err := asn1.Marshal(*r)
 	if err != nil {
@@ -61,7 +67,7 @@ func (r *RTU) Raw() (RawRTU, error) {
 	return der, nil
 }
 
-// Pack transforms this RTU structure to a PackedRTU
+// Pack transforms this RTU structure to a PackedRTU => base64url(RawRTU)
 func (r *RTU) Pack() (PackedRTU, error) {
 	der, err := r.Raw()
 	if err != nil {
@@ -73,6 +79,7 @@ func (r *RTU) Pack() (PackedRTU, error) {
 // RawRTU should always be an ASN.1 DER encoded RTU object
 type RawRTU []byte
 
+// parse only parses and returns the RTU object
 func (r RawRTU) parse() (*RTU, error) {
 	var out RTU
 	_, err := asn1.Unmarshal(r, &out)
@@ -82,6 +89,9 @@ func (r RawRTU) parse() (*RTU, error) {
 	return &out, nil
 }
 
+// Parse parses this RawRTU into an RTU object. If withValidation is true,
+// the parsing will also check, based on the Version inside RTU, if the size
+// of this document and/or payload size are within specs.
 func (r RawRTU) Parse(withValidation bool) (*RTU, error) {
 	out, err := r.parse()
 	if err != nil {
@@ -93,13 +103,15 @@ func (r RawRTU) Parse(withValidation bool) (*RTU, error) {
 	return out, err
 }
 
+// Pack just base64url encodes this RawRTU and returns it as PackedRTU
 func (r RawRTU) Pack() PackedRTU {
 	return PackedRTU(base64.RawURLEncoding.EncodeToString(r))
 }
 
-// PackedRTU is a base64-url encoded RTU object, marshalled via ASN.1 DER encoding
+// PackedRTU is a base64-url encoded RawRTU
 type PackedRTU string
 
+// Raw decodes this PackedRTU and returns the encoded RawRTU
 func (p PackedRTU) Raw() (RawRTU, error) {
 	der, err := base64.RawURLEncoding.DecodeString(string(p))
 	if err != nil {
@@ -108,7 +120,9 @@ func (p PackedRTU) Raw() (RawRTU, error) {
 	return der, nil
 }
 
-// Unpack decodes the PackedRTU and returns a RTU object
+// Unpack decodes the PackedRTU and returns a RTU object.
+// RawRTU.Parse validates by default using this method. If this is not needed, to increase
+// performance, you can always call Raw, then on the RawRTU call Parse(false).
 func (p PackedRTU) Unpack() (*RTU, error) {
 	raw, err := p.Raw()
 	if err != nil {

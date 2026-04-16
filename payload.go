@@ -4,13 +4,14 @@ import (
 	"time"
 )
 
-// Payload is the structureless data container for all versions of IOSS-RTUs.
+// Payload is the structureless data container for all versions of RTU
 type Payload struct {
 	// required info across all versions rtus
 	validUntil    time.Time
 	transactionID string
 
-	// cpk not nil means, this payload was signed
+	// cpk not nil means, this payload was signed.
+	// it should be set by signers, before Version.Make is called
 	cpk CPK
 
 	// optional keys
@@ -22,6 +23,7 @@ type Payload struct {
 	limitConsignments *int
 }
 
+// NewPayload creates an empty payload, with TransactionID and ValidUntil set (the bare minimum)
 func NewPayload(txID string, validUntil time.Time) *Payload {
 	return &Payload{
 		validUntil:    validUntil.UTC().Truncate(time.Second),

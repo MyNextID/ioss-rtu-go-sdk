@@ -10,6 +10,9 @@ import (
 	"io"
 )
 
+// PrivateKey is a helper structure, that wraps a private key with a SignatureAlgorithm.
+// It also generates its own CPK and exposes a common Sign method, for easier integration
+// with potential other SignatureAlgorithms down the line.
 type PrivateKey struct {
 	privKey any
 	alg     SignatureAlgorithm
@@ -17,6 +20,7 @@ type PrivateKey struct {
 	computedCPK CPK
 }
 
+// NewECPrivateKey only accepts P-256 private keys for now (because only AlgorithmEcdsaP256 is added)
 func NewECPrivateKey(priv *ecdsa.PrivateKey) (*PrivateKey, error) {
 	if priv.Curve != elliptic.P256() {
 		return nil, fmt.Errorf("%w: key must use P-256 curve", ErrKeyInvalid)
@@ -74,6 +78,7 @@ func (p *PrivateKey) GetCPK() CPK {
 	return p.computedCPK
 }
 
+// PublicKey returns a non-nil value on a valid PrivateKey instance.
 func (p *PrivateKey) PublicKey() crypto.PublicKey {
 	switch p.alg {
 	case AlgorithmEcdsaP256:
