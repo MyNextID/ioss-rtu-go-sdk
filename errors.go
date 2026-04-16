@@ -7,14 +7,16 @@ import (
 
 var (
 	ErrValidation                = errors.New("validation error")
-	ErrASN1Encoding              = errors.New("asn1 encoding error")
-	ErrASN1Decoding              = errors.New("asn1 decoding error")
-	ErrBase64Decoding            = errors.New("base64 decoding error")
+	ErrEncoding                  = errors.New("asn1 encoding error")
+	ErrDecoding                  = errors.New("asn1 decoding error")
 	ErrSignatureAlgorithmInvalid = errors.New("invalid signature algorithm")
+	ErrNoSignatureAlgorithm      = errors.New("no signature algorithm")
+	ErrCPKUnsupported            = errors.New("unsupported CPK type")
 	ErrSigning                   = errors.New("signing error")
 	ErrSignatureInvalid          = errors.New("signature invalid")
 	ErrKeyInvalid                = errors.New("invalid key")
 	ErrUnknownVersion            = errors.New("unknown version")
+	ErrEmptyInput                = errors.New("empty input")
 )
 
 // ValidationError carries per-field details

@@ -42,32 +42,16 @@ var (
 
 // ioss01Struct is the payload structure for Version1
 type ioss01Struct struct {
-	// Compressed secp256r1 public key (33 bytes)
-	CPK CPK `asn1:""`
+	CPK []byte
 
-	// Indicates whether this RTU can be delegated to another party
-	DelegatedUse bool `asn1:""`
-
-	// Legal/official name of the seller or business entity
-	SellerName string `asn1:"optional,utf8,tag:0"`
-
-	// Complete business address of the seller
-	SellerAddress string `asn1:"optional,utf8,tag:1"`
-
-	// Unique transaction identifier assigned by merchant/seller
-	TransactionID string `asn1:"utf8"`
-
-	// Unix timestamp (seconds) when this RTU expires
-	ValidUntil int64 `asn1:""`
-
-	// Optional geographic restriction for delivery (ISO 3166-1 alpha-2 + region)
-	LimitDeliveryArea string `asn1:"utf8,optional"`
-
-	// Optional list of consignment/shipment identifiers (max 10)
-	ConsignmentIDs []string `asn1:"set,optional"`
-
-	// Optional limit on total number of consignments (1-100)
-	LimitConsignments int `asn1:"optional,default:0"`
+	DelegatedUse      bool
+	SellerName        string `asn1:"optional,utf8,tag:0"`
+	SellerAddress     string `asn1:"optional,utf8,tag:1"`
+	TransactionID     string `asn1:"utf8"`
+	ValidUntil        int64
+	LimitDeliveryArea string   `asn1:"optional,utf8"`
+	ConsignmentIDs    []string `asn1:"optional"`
+	LimitConsignments int      `asn1:"optional"`
 }
 
 func (i ioss01Struct) validateCPK() error {
@@ -279,42 +263,64 @@ func (i ioss01Struct) Payload() (*Payload, error) {
 	return payload, nil
 }
 
-func init() {
-	// Register Version1 parser and builder
-	RegisterVersion(Version1, func(asn1der []byte) (SchemaPayload, error) {
-		var temp ioss01Struct
-		if _, err := asn1.Unmarshal(asn1der, &temp); err != nil {
-			return nil, ErrASN1Decoding
+func parseV1RTU(raw []byte) (ioss01Struct, error) {
+	var temp ioss01Struct
+	if _, err := asn1.Unmarshal(raw, &temp); err != nil {
+		return ioss01Struct{}, fmt.Errorf("failed to decode struct version %d from payload: %w", Version1, err)
+	}
+	return temp, nil
+}
+
+func buildV1RTU(values *Payload) (raw []byte, err error) {
+	temp := ioss01Struct{
+		CPK:           values.CPK(),
+		ValidUntil:    values.ValidUntil().Unix(),
+		TransactionID: values.TransactionID(),
+	}
+	if delegatedUse := values.DelegatedUse(); delegatedUse != nil {
+		temp.DelegatedUse = *delegatedUse
+	} else {
+		return nil, &ValidationError{
+			Field:   "DelegatedUse",
+			Message: fmt.Sprintf("delegated use is not set"),
 		}
-		return &temp, nil
-	}, func(values *Payload) (raw SchemaPayload, err error) {
-		temp := ioss01Struct{
-			CPK:           values.CPK(),
-			ValidUntil:    values.ValidUntil().Unix(),
-			TransactionID: values.TransactionID(),
+	}
+	if sellerName := values.SellerName(); sellerName != nil {
+		temp.SellerName = *sellerName
+	}
+	if sellerAddress := values.SellerAddress(); sellerAddress != nil {
+		temp.SellerAddress = *sellerAddress
+	}
+	if consignments := values.Consignments(); consignments != nil {
+		temp.ConsignmentIDs = consignments
+	} else if limitConsignments := values.LimitConsignments(); limitConsignments != nil {
+		temp.LimitConsignments = *limitConsignments
+	}
+	if deliveryArea := values.LimitDeliverArea(); deliveryArea != nil {
+		temp.LimitDeliveryArea = *deliveryArea
+	}
+	if err = temp.Validate(); err != nil {
+		return nil, err
+	}
+	raw, err = asn1.Marshal(temp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode version %d struct with asn.1: %w", Version1, ErrEncoding)
+	}
+	return raw, nil
+}
+
+func validateV1RTU(rtu *RTU, sizeOfRaw int) error {
+	if sizeOfRaw > version1MaxEncodedSignedDataBytes {
+		return &ValidationError{
+			Field:   "$",
+			Message: fmt.Sprintf("signedRtu is too large (%d bytes)", sizeOfRaw),
 		}
-		if delegatedUse := values.DelegatedUse(); delegatedUse != nil {
-			temp.DelegatedUse = *delegatedUse
-		} else {
-			return nil, &ValidationError{
-				Field:   "DelegatedUse",
-				Message: fmt.Sprintf("delegated use is not set"),
-			}
+	}
+	if len(rtu.Payload) > version1MaxEncodedRTUBytes {
+		return &ValidationError{
+			Field:   "Payload",
+			Message: fmt.Sprintf("payload is too large (%d bytes)", len(rtu.Payload)),
 		}
-		if sellerName := values.SellerName(); sellerName != nil {
-			temp.SellerName = *sellerName
-		}
-		if sellerAddress := values.SellerAddress(); sellerAddress != nil {
-			temp.SellerAddress = *sellerAddress
-		}
-		if consignments := values.Consignments(); consignments != nil {
-			temp.ConsignmentIDs = consignments
-		} else if limitConsignments := values.LimitConsignments(); limitConsignments != nil {
-			temp.LimitConsignments = *limitConsignments
-		}
-		if deliveryArea := values.LimitDeliverArea(); deliveryArea != nil {
-			temp.LimitDeliveryArea = *deliveryArea
-		}
-		return temp, temp.Validate()
-	})
+	}
+	return nil
 }

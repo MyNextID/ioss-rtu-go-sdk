@@ -1,7 +1,7 @@
 package rtu
 
 import (
-	"encoding/asn1"
+	"fmt"
 )
 
 type Version int32
@@ -10,15 +10,31 @@ const (
 	Version1 Version = 1
 )
 
-// Parse only parses the raw payload with this Version.
-func (v Version) Parse(payload []byte, withValidation bool) (*Payload, error) {
-	// get generator for the structure of this version
-	parser, ok := parserRegistry[v]
-	if !ok {
+func (v Version) Validate(rtu *RTU, sizeOfRaw int) error {
+	switch v {
+	case Version1:
+		return validateV1RTU(rtu, sizeOfRaw)
+	default:
+		return &ValidationError{
+			Field:   "Version",
+			Message: fmt.Sprintf("invalid version: %d", v),
+		}
+	}
+}
+
+func (v Version) parseSchemaPayload(payload []byte) (SchemaPayload, error) {
+	switch v {
+	case Version1:
+		return parseV1RTU(payload)
+	default:
 		return nil, ErrUnknownVersion
 	}
+}
+
+// Parse only parses the raw payload with this Version.
+func (v Version) Parse(payload []byte, withValidation bool) (*Payload, error) {
 	// get new variable of the correct type
-	raw, err := parser(payload)
+	raw, err := v.parseSchemaPayload(payload)
 	if err != nil {
 		return nil, err
 	}
@@ -33,22 +49,12 @@ func (v Version) Parse(payload []byte, withValidation bool) (*Payload, error) {
 }
 
 func (v Version) Make(payload *Payload) ([]byte, error) {
-	// get version object builder
-	builder, ok := builderRegistry[v]
-	if !ok {
+	switch v {
+	case Version1:
+		return buildV1RTU(payload)
+	default:
 		return nil, ErrUnknownVersion
 	}
-	// generate payload object for this version from *Payload
-	raw, err := builder(payload)
-	if err != nil {
-		return nil, err
-	}
-	// build ASN.1¸DER byte array (payload)
-	out, err := asn1.Marshal(raw)
-	if err != nil {
-		return nil, ErrASN1Encoding
-	}
-	return out, nil
 }
 
 func (v Version) DefaultSignatureAlgorithm() SignatureAlgorithm {
@@ -58,16 +64,4 @@ func (v Version) DefaultSignatureAlgorithm() SignatureAlgorithm {
 	default:
 		return AlgorithmNone
 	}
-}
-
-type SchemaParser func(asn1der []byte) (SchemaPayload, error)
-type SchemaBuilder func(values *Payload) (raw SchemaPayload, err error)
-
-// version registries
-var parserRegistry = map[Version]SchemaParser{}
-var builderRegistry = map[Version]SchemaBuilder{}
-
-func RegisterVersion(id Version, parser SchemaParser, builder SchemaBuilder) {
-	parserRegistry[id] = parser
-	builderRegistry[id] = builder
 }

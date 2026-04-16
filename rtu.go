@@ -3,6 +3,7 @@ package rtu
 import (
 	"encoding/asn1"
 	"encoding/base64"
+	"fmt"
 )
 
 type RTU struct {
@@ -52,28 +53,66 @@ func (r *RTU) Parse(withValidations bool) (*Payload, error) {
 	return out, nil
 }
 
-// Pack transforms this RTU structure to a PackedRTU
-func (r *RTU) Pack() (PackedRTU, error) {
+func (r *RTU) Raw() (RawRTU, error) {
 	der, err := asn1.Marshal(*r)
 	if err != nil {
-		return "", ErrASN1Encoding
+		return nil, fmt.Errorf("asn1.Marshal failed to encode RTU: %w", ErrEncoding)
 	}
-	return PackedRTU(base64.RawURLEncoding.EncodeToString(der)), nil
+	return der, nil
+}
+
+// Pack transforms this RTU structure to a PackedRTU
+func (r *RTU) Pack() (PackedRTU, error) {
+	der, err := r.Raw()
+	if err != nil {
+		return "", err
+	}
+	return der.Pack(), nil
+}
+
+// RawRTU should always be an ASN.1 DER encoded RTU object
+type RawRTU []byte
+
+func (r RawRTU) parse() (*RTU, error) {
+	var out RTU
+	_, err := asn1.Unmarshal(r, &out)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing RawRTU to RTU: %w", err)
+	}
+	return &out, nil
+}
+
+func (r RawRTU) Parse(withValidation bool) (*RTU, error) {
+	out, err := r.parse()
+	if err != nil {
+		return nil, err
+	}
+	if withValidation {
+		err = out.Version.Validate(out, len(r))
+	}
+	return out, err
+}
+
+func (r RawRTU) Pack() PackedRTU {
+	return PackedRTU(base64.RawURLEncoding.EncodeToString(r))
 }
 
 // PackedRTU is a base64-url encoded RTU object, marshalled via ASN.1 DER encoding
 type PackedRTU string
 
-// Unpack decodes the PackedRTU and returns a RTU object
-func (p PackedRTU) Unpack() (*RTU, error) {
+func (p PackedRTU) Raw() (RawRTU, error) {
 	der, err := base64.RawURLEncoding.DecodeString(string(p))
 	if err != nil {
-		return nil, ErrBase64Decoding
+		return nil, fmt.Errorf("failed to decode PackedRTU to RawRTU: %w", ErrDecoding)
 	}
-	var out RTU
-	_, err = asn1.Unmarshal(der, &out)
+	return der, nil
+}
+
+// Unpack decodes the PackedRTU and returns a RTU object
+func (p PackedRTU) Unpack() (*RTU, error) {
+	raw, err := p.Raw()
 	if err != nil {
-		return nil, ErrASN1Decoding
+		return nil, err
 	}
-	return &out, nil
+	return raw.Parse(true)
 }

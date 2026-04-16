@@ -24,7 +24,7 @@ type Payload struct {
 
 func NewPayload(txID string, validUntil time.Time) *Payload {
 	return &Payload{
-		validUntil:    validUntil,
+		validUntil:    validUntil.UTC().Truncate(time.Second),
 		transactionID: txID,
 	}
 }
