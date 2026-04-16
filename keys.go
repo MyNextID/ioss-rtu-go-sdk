@@ -1,6 +1,7 @@
 package rtu
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/x509"
@@ -71,6 +72,16 @@ func (p *PrivateKey) Algorithm() SignatureAlgorithm {
 // GetCPK returns the CPK for this PrivateKey
 func (p *PrivateKey) GetCPK() CPK {
 	return p.computedCPK
+}
+
+func (p *PrivateKey) PublicKey() crypto.PublicKey {
+	switch p.alg {
+	case AlgorithmEcdsaP256:
+		key := p.privKey.(*ecdsa.PrivateKey)
+		return key.Public()
+	default:
+		return nil
+	}
 }
 
 // Sign allows this private key to sign the given payload, by digesting it with SignatureAlgorithm
