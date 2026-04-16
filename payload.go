@@ -42,6 +42,10 @@ func (p *Payload) SetCPK(cpk CPK) *Payload {
 	return p
 }
 
+func (p *Payload) IsExpired() bool {
+	return p.validUntil.Before(time.Now())
+}
+
 func (p *Payload) ValidUntil() time.Time {
 	return p.validUntil
 }

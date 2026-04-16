@@ -14,15 +14,15 @@ func SignV1(payload *Payload, privKey *ecdsa.PrivateKey) (*RTU, error) {
 		return nil, err
 	}
 	out := &RTU{
-		RawVersion: int32(Version1),
-		Payload:    raw,
-		Signature:  nil,
+		Version:   Version1,
+		Payload:   raw,
+		Signature: nil,
 		// Algorithm not set, as Version1 defines that algorithm is ommited (can only be ECDSA-P256)
 	}
 	hash := sha256.Sum256(raw)
 	signature, err := ecdsa.SignASN1(rand.Reader, privKey, hash[:])
 	if err != nil {
-		return nil, err
+		return nil, ErrSigning
 	}
 	out.Signature = signature
 	return out, nil

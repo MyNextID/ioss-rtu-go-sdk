@@ -3,11 +3,9 @@ package rtu
 import (
 	"encoding/asn1"
 	"errors"
-
-	"github.com/go-playground/validator/v10"
 )
 
-type Version uint16
+type Version int32
 
 const (
 	Version1 Version = 1
@@ -27,11 +25,7 @@ func (v Version) Parse(payload []byte, withValidation bool) (*Payload, error) {
 	}
 	// validate structure, if withValidation is given
 	if withValidation {
-		validatorInstance, ok := validatorRegistry[v]
-		if !ok {
-			return nil, errors.New("invalid version")
-		}
-		if err := validatorInstance.Struct(raw); err != nil {
+		if err = raw.Validate(); err != nil {
 			return nil, err
 		}
 	}
@@ -51,7 +45,11 @@ func (v Version) Make(payload *Payload) ([]byte, error) {
 		return nil, err
 	}
 	// build ASN.1¸DER byte array (payload)
-	return asn1.Marshal(raw)
+	out, err := asn1.Marshal(raw)
+	if err != nil {
+		return nil, ErrASN1Encoding
+	}
+	return out, nil
 }
 
 func (v Version) DefaultSignatureAlgorithm() SignatureAlgorithm {
@@ -68,11 +66,9 @@ type SchemaBuilder func(values *Payload) (raw SchemaPayload, err error)
 
 // version registries
 var parserRegistry = map[Version]SchemaParser{}
-var validatorRegistry = map[Version]*validator.Validate{}
 var builderRegistry = map[Version]SchemaBuilder{}
 
 func RegisterVersion(id Version, parser SchemaParser, builder SchemaBuilder) {
 	parserRegistry[id] = parser
 	builderRegistry[id] = builder
-	validatorRegistry[id] = validator.New()
 }
