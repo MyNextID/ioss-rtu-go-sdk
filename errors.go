@@ -25,6 +25,26 @@ type ValidationError struct {
 	Message string
 }
 
+// ValidationFields valid values
+const (
+	// Validations for RTU object (RawRTU.Parse)
+	ValidationFieldPayload   = "Payload"
+	ValidationFieldAlgorithm = "Algorithm"
+	ValidationFieldVersion   = "Version"
+	ValidationFieldRTU       = "RTU"
+
+	// Validations for RTU.Payload
+	ValidationFieldTransactionID     = "TransactionID"
+	ValidationFieldValidUntil        = "ValidUntil"
+	ValidationFieldCPK               = "CPK"
+	ValidationFieldDelegatedUse      = "DelegatedUse"
+	ValidationFieldSellerName        = "SellerName"
+	ValidationFieldSellerAddress     = "SellerAddress"
+	ValidationFieldLimitDeliveryArea = "LimitDeliveryArea"
+	ValidationFieldConsignmentIDs    = "ConsignmentIDs"
+	ValidationFieldLimitConsignments = "LimitConsignments"
+)
+
 func (e *ValidationError) Error() string {
 	return fmt.Sprintf("validation error: field %q: %s", e.Field, e.Message)
 }

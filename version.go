@@ -22,7 +22,7 @@ func (v Version) Validate(rtu *RTU, sizeOfRaw int) error {
 		return validateV1RTU(rtu, sizeOfRaw)
 	default:
 		return &ValidationError{
-			Field:   "Version",
+			Field:   ValidationFieldVersion,
 			Message: fmt.Sprintf("invalid version: %d", v),
 		}
 	}

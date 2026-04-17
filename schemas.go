@@ -57,7 +57,7 @@ type ioss01Struct struct {
 func (i ioss01Struct) validateCPK() error {
 	if len(i.CPK) != version1CpkByteLength {
 		return &ValidationError{
-			Field:   "CPK",
+			Field:   ValidationFieldCPK,
 			Message: fmt.Sprintf("must be exactly %d bytes, got %d", version1CpkByteLength, len(i.CPK)),
 		}
 	}
@@ -65,7 +65,7 @@ func (i ioss01Struct) validateCPK() error {
 	first := i.CPK[0]
 	if first != 0x02 && first != 0x03 {
 		return &ValidationError{
-			Field:   "CPK",
+			Field:   ValidationFieldCPK,
 			Message: fmt.Sprintf("first byte must be 0x02 or 0x03 (compressed point prefix), got 0x%02x", first),
 		}
 	}
@@ -73,7 +73,7 @@ func (i ioss01Struct) validateCPK() error {
 	x, y := elliptic.UnmarshalCompressed(elliptic.P256(), i.CPK)
 	if x == nil || y == nil {
 		return &ValidationError{
-			Field:   "CPK",
+			Field:   ValidationFieldCPK,
 			Message: "could not decompress compressed public key (cpk)",
 		}
 	}
@@ -85,7 +85,7 @@ func (i ioss01Struct) validateTransactionID() error {
 	l := len(i.TransactionID)
 	if l < 1 || l > 50 {
 		return &ValidationError{
-			Field:   "TransactionID",
+			Field:   ValidationFieldTransactionID,
 			Message: fmt.Sprintf("must be between 1 and 50 characters, got %d", l),
 		}
 	}
@@ -96,7 +96,7 @@ func (i ioss01Struct) validateTransactionID() error {
 func (i ioss01Struct) validateValidUntil() error {
 	if i.ValidUntil <= time.Now().Unix() {
 		return &ValidationError{
-			Field:   "ValidUntil",
+			Field:   ValidationFieldValidUntil,
 			Message: "must be a Unix timestamp strictly in the future",
 		}
 	}
@@ -111,7 +111,7 @@ func (i ioss01Struct) validateLimitDeliveryArea() error {
 
 	if !version1LimitDeliveryAreaRegex.MatchString(i.LimitDeliveryArea) {
 		return &ValidationError{
-			Field:   "LimitDeliveryArea",
+			Field:   ValidationFieldLimitDeliveryArea,
 			Message: fmt.Sprintf("must match ^[A-Z]{2}-[A-Z0-9]{1,4}$, got %q", i.LimitDeliveryArea),
 		}
 	}
@@ -123,7 +123,7 @@ func (i ioss01Struct) validateConsignments() error {
 	if len(i.ConsignmentIDs) > 0 {
 		if i.LimitConsignments != 0 {
 			return &ValidationError{
-				Field:   "LimitConsignments",
+				Field:   ValidationFieldLimitConsignments,
 				Message: fmt.Sprintf("rtu has ConsignmentIDs, LimitConsignments should be 0, got %d", i.LimitConsignments),
 			}
 		}
@@ -139,7 +139,7 @@ func (i ioss01Struct) validateConsignmentIDs() error {
 
 	if len(i.ConsignmentIDs) > version1MaxNumberOfConsignmentIDs {
 		return &ValidationError{
-			Field:   "ConsignmentIDs",
+			Field:   ValidationFieldConsignmentIDs,
 			Message: fmt.Sprintf("must contain at most 10 items, got %d", len(i.ConsignmentIDs)),
 		}
 	}
@@ -148,21 +148,21 @@ func (i ioss01Struct) validateConsignmentIDs() error {
 	for i, id := range i.ConsignmentIDs {
 		if len(id) > version1MaxConsignmentIDCharacterSize {
 			return &ValidationError{
-				Field:   "ConsignmentIDs",
+				Field:   ValidationFieldConsignmentIDs,
 				Message: fmt.Sprintf("item %d exceeds 35 characters (got %d)", i, len(id)),
 			}
 		}
 
 		if len(id) == 0 {
 			return &ValidationError{
-				Field:   "ConsignmentIDs",
+				Field:   ValidationFieldConsignmentIDs,
 				Message: fmt.Sprintf("item %d is an empty string", i),
 			}
 		}
 
 		if _, exists := seen[id]; exists {
 			return &ValidationError{
-				Field:   "ConsignmentIDs",
+				Field:   ValidationFieldConsignmentIDs,
 				Message: fmt.Sprintf("duplicate consignment ID %q", id),
 			}
 		}
@@ -180,7 +180,7 @@ func (i ioss01Struct) validateLimitConsignments() error {
 
 	if i.LimitConsignments < 1 || i.LimitConsignments > 100 {
 		return &ValidationError{
-			Field:   "LimitConsignments",
+			Field:   ValidationFieldLimitConsignments,
 			Message: fmt.Sprintf("must be between 1 and 100, got %d", i.LimitConsignments),
 		}
 	}
@@ -191,7 +191,7 @@ func (i ioss01Struct) validateLimitConsignments() error {
 func (i ioss01Struct) validateSellerName() error {
 	if len(i.SellerName) > version1MaxSellerNameCharacterSize {
 		return &ValidationError{
-			Field:   "SellerName",
+			Field:   ValidationFieldSellerName,
 			Message: fmt.Sprintf("must not exceed 100 characters, got %d", len(i.SellerName)),
 		}
 	}
@@ -202,7 +202,7 @@ func (i ioss01Struct) validateSellerName() error {
 func (i ioss01Struct) validateSellerAddress() error {
 	if len(i.SellerAddress) > version1MaxAddressCharacterSize {
 		return &ValidationError{
-			Field:   "SellerAddress",
+			Field:   ValidationFieldSellerAddress,
 			Message: fmt.Sprintf("must not exceed 100 characters, got %d", len(i.SellerAddress)),
 		}
 	}
@@ -290,7 +290,7 @@ func buildV1RTU(values *Payload) (raw []byte, err error) {
 		temp.DelegatedUse = *delegatedUse
 	} else {
 		return nil, &ValidationError{
-			Field:   "DelegatedUse",
+			Field:   ValidationFieldDelegatedUse,
 			Message: fmt.Sprintf("delegated use is not set"),
 		}
 	}
@@ -307,6 +307,12 @@ func buildV1RTU(values *Payload) (raw []byte, err error) {
 		}
 	}
 	if consignments := values.Consignments(); consignments != nil {
+		if limitConsignments := values.LimitConsignments(); limitConsignments != nil {
+			return nil, &ValidationError{
+				Field:   ValidationFieldLimitConsignments,
+				Message: fmt.Sprintf("rtu has ConsignmentIDs, LimitConsignments should be 0, got %d", *limitConsignments),
+			}
+		}
 		temp.ConsignmentIDs = consignments
 		if err = temp.validateConsignmentIDs(); err != nil {
 			return nil, err
@@ -334,14 +340,20 @@ func buildV1RTU(values *Payload) (raw []byte, err error) {
 func validateV1RTU(rtu *RTU, sizeOfRaw int) error {
 	if sizeOfRaw > version1MaxEncodedSignedDataBytes {
 		return &ValidationError{
-			Field:   "$",
+			Field:   ValidationFieldRTU,
 			Message: fmt.Sprintf("signedRtu is too large (%d bytes)", sizeOfRaw),
 		}
 	}
 	if len(rtu.Payload) > version1MaxEncodedRTUBytes {
 		return &ValidationError{
-			Field:   "Payload",
+			Field:   ValidationFieldPayload,
 			Message: fmt.Sprintf("payload is too large (%d bytes)", len(rtu.Payload)),
+		}
+	}
+	if rtu.Algorithm != AlgorithmNone {
+		return &ValidationError{
+			Field:   ValidationFieldAlgorithm,
+			Message: fmt.Sprintf("algorithm is not supported in version 1 (%s)", rtu.Algorithm),
 		}
 	}
 	return nil
