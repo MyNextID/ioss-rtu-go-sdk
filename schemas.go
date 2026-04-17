@@ -277,6 +277,15 @@ func buildV1RTU(values *Payload) (raw []byte, err error) {
 		ValidUntil:    values.ValidUntil().Unix(),
 		TransactionID: values.TransactionID(),
 	}
+	if err = temp.validateCPK(); err != nil {
+		return nil, err
+	}
+	if err = temp.validateValidUntil(); err != nil {
+		return nil, err
+	}
+	if err = temp.validateTransactionID(); err != nil {
+		return nil, err
+	}
 	if delegatedUse := values.DelegatedUse(); delegatedUse != nil {
 		temp.DelegatedUse = *delegatedUse
 	} else {
@@ -287,21 +296,34 @@ func buildV1RTU(values *Payload) (raw []byte, err error) {
 	}
 	if sellerName := values.SellerName(); sellerName != nil {
 		temp.SellerName = *sellerName
+		if err = temp.validateSellerName(); err != nil {
+			return nil, err
+		}
 	}
 	if sellerAddress := values.SellerAddress(); sellerAddress != nil {
 		temp.SellerAddress = *sellerAddress
+		if err = temp.validateSellerAddress(); err != nil {
+			return nil, err
+		}
 	}
 	if consignments := values.Consignments(); consignments != nil {
 		temp.ConsignmentIDs = consignments
+		if err = temp.validateConsignmentIDs(); err != nil {
+			return nil, err
+		}
 	} else if limitConsignments := values.LimitConsignments(); limitConsignments != nil {
 		temp.LimitConsignments = *limitConsignments
+		if err = temp.validateLimitConsignments(); err != nil {
+			return nil, err
+		}
 	}
 	if deliveryArea := values.LimitDeliverArea(); deliveryArea != nil {
 		temp.LimitDeliveryArea = *deliveryArea
+		if err = temp.validateLimitDeliveryArea(); err != nil {
+			return nil, err
+		}
 	}
-	if err = temp.Validate(); err != nil {
-		return nil, err
-	}
+	// structure built, marshal it and return
 	raw, err = asn1.Marshal(temp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode version %d struct with asn.1: %w", Version1, ErrEncoding)

@@ -84,7 +84,7 @@ func (r RawRTU) parse() (*RTU, error) {
 	var out RTU
 	_, err := asn1.Unmarshal(r, &out)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing RawRTU to RTU: %w", err)
+		return nil, fmt.Errorf("error parsing RawRTU to RTU: %w", ErrDecoding)
 	}
 	return &out, nil
 }

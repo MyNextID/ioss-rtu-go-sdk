@@ -74,6 +74,14 @@ func GenerateKey(tb testing.TB) *ecdsa.PrivateKey {
 	return priv
 }
 
+func GenerateRTUPrivateKey(tb testing.TB) *rtu.PrivateKey {
+	out, err := rtu.NewECPrivateKey(GenerateKey(tb))
+	if err != nil {
+		tb.Fatalf("failed to generate RTU private key: %v", err)
+	}
+	return out
+}
+
 func MinimalRTU() *rtu.Payload {
 	return rtu.NewPayload("tx-minimal",
 		time.Now().Add(minimalRTUValidHours*time.Hour)).
@@ -105,6 +113,24 @@ func MaxRTU() *rtu.Payload {
 			strings.Repeat("7", maxConsignmentIDLen), strings.Repeat("8", maxConsignmentIDLen),
 			strings.Repeat("9", maxConsignmentIDLen), strings.Repeat("0", maxConsignmentIDLen),
 		})
+}
+
+func SignedRTU(tb testing.TB) *rtu.RTU {
+	tb.Helper()
+
+	out, err := rtu.SignV1(MinimalRTU(), GenerateRTUPrivateKey(tb))
+	if err != nil {
+		tb.Fatalf("failed to sign RTU: %v", err)
+	}
+	return out
+}
+
+func SignedPackedRTU(tb testing.TB) rtu.PackedRTU {
+	out, err := SignedRTU(tb).Pack()
+	if err != nil {
+		tb.Fatalf("failed to pack RTU: %v", err)
+	}
+	return out
 }
 
 // =============================================================================
