@@ -371,3 +371,42 @@ func TestVersion1_Make_PayloadWithInvalidLimitConsignment(t *testing.T) {
 		t.Errorf("Make() returned unexpected error: %v", err)
 	}
 }
+
+func TestVersion1_DefaultSignatureAlgorithm(t *testing.T) {
+	t.Parallel()
+
+	if rtu.Version1.DefaultSignatureAlgorithm() != rtu.AlgorithmEcdsaP256 {
+		t.Errorf("Incorrect default signature algorithm for version 1")
+	}
+}
+
+func TestVersion1_Parse_ValidPayload(t *testing.T) {
+	t.Parallel()
+
+	payload := rtu.NewPayload("tx-test", time.Now().Add(time.Hour)).SetDelegatedUse(false)
+
+	parsedPayload, err := rtu.Version1.Parse(generateExampleV1RTU(payload, t).Payload, true)
+	if err != nil {
+		t.Errorf("Parse() returned unexpected error: %v", err)
+	}
+
+	helpers.AssertPayloadEqual(t, payload, parsedPayload)
+}
+
+func TestVersion1_Parse_EmptyPayload(t *testing.T) {
+	t.Parallel()
+
+	_, err := rtu.Version1.Parse([]byte{}, true)
+	if err == nil {
+		t.Errorf("Parse() expected to return an error")
+	}
+}
+
+func TestVersion1_Parse_InvalidPayload(t *testing.T) {
+	t.Parallel()
+
+	_, err := rtu.Version1.Parse([]byte("foobar"), true)
+	if err == nil {
+		t.Errorf("Parse() expected to return an error")
+	}
+}

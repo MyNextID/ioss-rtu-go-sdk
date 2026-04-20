@@ -10,7 +10,7 @@ import (
 // Payload is parsed based on Version in this object. Signature and Payload.CPK are defined by Algorithm.
 // If there is no Algorithm, the default SignatureAlgorithm of the given Version is used.
 type RTU struct {
-	// ContentType is the type of this signed rtu (schema id). It determines what type of payload we should expect
+	// Version is the type of this signed rtu (schema id). It determines what type of payload we should expect
 	Version Version `json:"version" asn1:""`
 	// Payload is the raw byte array of the RTU payload
 	Payload []byte `json:"payload" asn1:""`
@@ -41,13 +41,13 @@ func (r *RTU) Parse(withValidations bool) (*Payload, error) {
 	if withValidations {
 		// check signature with payload
 		algorithm := r.GetSignatureAlgorithm()
-		var pubKey any
+		var pubKey PublicKey
 		pubKey, err = out.CPK().Parse(algorithm)
 		if err != nil {
 			return nil, err
 		}
 		var ok bool
-		ok, err = algorithm.Verify(pubKey, r.Payload, r.Signature)
+		ok, err = pubKey.Verify(r.Payload, r.Signature)
 		if err != nil {
 			return nil, err
 		}

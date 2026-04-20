@@ -5,6 +5,21 @@ import (
 	"fmt"
 )
 
+type Signer func(payload *Payload, key *PrivateKey) (*RTU, error)
+
+// Sign uses the given Version to generate an RTU object, then packs it and returns a PackedRTU
+func Sign(version Version, payload *Payload, key *PrivateKey) (PackedRTU, error) {
+	signer, err := version.Signer()
+	if err != nil {
+		return "", err
+	}
+	obj, err := signer(payload, key)
+	if err != nil {
+		return "", err
+	}
+	return obj.Pack()
+}
+
 // SignV1 signs the given Payload object with ECDSA-P256 and creates a
 // Version1 RTU object.
 func SignV1(payload *Payload, key *PrivateKey) (*RTU, error) {

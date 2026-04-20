@@ -10,29 +10,84 @@ import (
 	"io"
 )
 
+type PublicKey struct {
+	pubKey crypto.PublicKey
+	alg    SignatureAlgorithm
+
+	computedCPK CPK
+}
+
+func newPublicKey(pubKey any, alg SignatureAlgorithm, computedCpk CPK) (PublicKey, error) {
+	if computedCpk == nil {
+		var err error
+		computedCpk, err = NewCPK(pubKey, alg)
+		if err != nil {
+			return PublicKey{}, err
+		}
+	}
+	return PublicKey{
+		pubKey:      pubKey,
+		alg:         alg,
+		computedCPK: computedCpk,
+	}, nil
+}
+
+func NewECPublicKey(pub *ecdsa.PublicKey) (PublicKey, error) {
+	if pub.Curve != elliptic.P256() {
+		return PublicKey{}, fmt.Errorf("%w: key must use P-256 curve", ErrKeyInvalid)
+	}
+	return newPublicKey(pub, AlgorithmEcdsaP256, nil)
+}
+
+// Algorithm returns the SignatureAlgorithm that this PublicKey uses
+func (p PublicKey) Algorithm() SignatureAlgorithm {
+	return p.alg
+}
+
+// GetCPK returns the CPK for this PublicKey
+func (p PublicKey) GetCPK() CPK {
+	return p.computedCPK
+}
+
+// GetPublicKey returns the raw publicKey of this PublicKey structure
+func (p PublicKey) GetPublicKey() crypto.PublicKey {
+	return p.pubKey
+}
+
+// Verify verifies the signature, based on the given pubKey and payload.
+// payload must not already be digested, as this function takes care of that.
+// pubKey can be a CPK, in which case this method will parse the CPK and get the correct key
+func (p PublicKey) Verify(payload []byte, signature []byte) (bool, error) {
+	switch p.alg {
+	case AlgorithmEcdsaP256:
+		if key, ok := p.pubKey.(*ecdsa.PublicKey); ok {
+			return ecdsa.VerifyASN1(key, p.alg.Digest(payload), signature), nil
+		} else {
+			return false, ErrKeyInvalid
+		}
+	default:
+		return false, ErrSignatureAlgorithmInvalid
+	}
+}
+
 // PrivateKey is a helper structure, that wraps a private key with a SignatureAlgorithm.
 // It also generates its own CPK and exposes a common Sign method, for easier integration
 // with potential other SignatureAlgorithms down the line.
 type PrivateKey struct {
 	privKey any
-	alg     SignatureAlgorithm
 
-	computedCPK CPK
+	PublicKey
 }
 
 // NewECPrivateKey only accepts P-256 private keys for now (because only AlgorithmEcdsaP256 is added)
 func NewECPrivateKey(priv *ecdsa.PrivateKey) (*PrivateKey, error) {
-	if priv.Curve != elliptic.P256() {
-		return nil, fmt.Errorf("%w: key must use P-256 curve", ErrKeyInvalid)
-	}
-	cpk, err := NewCPK(&priv.PublicKey, AlgorithmEcdsaP256)
+	pub, err := NewECPublicKey(&priv.PublicKey)
 	if err != nil {
 		return nil, err
 	}
 	return &PrivateKey{
-		privKey:     priv,
-		alg:         AlgorithmEcdsaP256,
-		computedCPK: cpk,
+		privKey:   priv,
+		PublicKey: pub,
 	}, nil
 }
 
@@ -65,27 +120,6 @@ func LoadPrivateKeyPEM(pemBytes []byte) (*PrivateKey, error) {
 
 	default:
 		return nil, fmt.Errorf("%w: unsupported PEM block type %q", ErrKeyInvalid, block.Type)
-	}
-}
-
-// Algorithm returns the SignatureAlgorithm that this PrivateKey uses
-func (p *PrivateKey) Algorithm() SignatureAlgorithm {
-	return p.alg
-}
-
-// GetCPK returns the CPK for this PrivateKey
-func (p *PrivateKey) GetCPK() CPK {
-	return p.computedCPK
-}
-
-// PublicKey returns a non-nil value on a valid PrivateKey instance.
-func (p *PrivateKey) PublicKey() crypto.PublicKey {
-	switch p.alg {
-	case AlgorithmEcdsaP256:
-		key := p.privKey.(*ecdsa.PrivateKey)
-		return key.Public()
-	default:
-		return nil
 	}
 }
 

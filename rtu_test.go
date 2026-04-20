@@ -15,7 +15,7 @@ import (
 func TestPackedRTU_UnpackValidRTU(t *testing.T) {
 	t.Parallel()
 
-	validRtu := helpers.SignedPackedRTU(t)
+	validRtu := helpers.SignedPackedRTUV1(t)
 
 	_, err := validRtu.Unpack()
 
@@ -80,7 +80,7 @@ func TestPackedRTU_UnpackRTUWithInvalidSize(t *testing.T) {
 }
 
 func BenchmarkRTU_Pack(b *testing.B) {
-	signedRtu := helpers.SignedRTU(b)
+	signedRtu := helpers.SignedRTUV1(b)
 
 	b.ResetTimer()
 
@@ -90,7 +90,7 @@ func BenchmarkRTU_Pack(b *testing.B) {
 }
 
 func BenchmarkPackedRTU_Unpack(b *testing.B) {
-	packedRtu := helpers.SignedPackedRTU(b)
+	packedRtu := helpers.SignedPackedRTUV1(b)
 
 	b.ResetTimer()
 
@@ -100,7 +100,7 @@ func BenchmarkPackedRTU_Unpack(b *testing.B) {
 }
 
 func BenchmarkPackedRTU_UnpackWithoutValidation(b *testing.B) {
-	packedRtu := helpers.SignedPackedRTU(b)
+	packedRtu := helpers.SignedPackedRTUV1(b)
 
 	b.ResetTimer()
 

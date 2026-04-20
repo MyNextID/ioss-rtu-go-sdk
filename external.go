@@ -6,22 +6,15 @@ import (
 )
 
 type ExternalSigner struct {
-	version            Version
-	signatureAlgorithm SignatureAlgorithm
-	pubKey             any
-
-	computedCPK CPK
+	version   Version
+	publicKey PublicKey
 }
 
-func NewExternalSigner(version Version, signatureAlgorithm SignatureAlgorithm, pubKey any) (*ExternalSigner, error) {
-	out := &ExternalSigner{
-		version:            version,
-		signatureAlgorithm: signatureAlgorithm,
-		pubKey:             pubKey,
+func NewExternalSigner(version Version, publicKey PublicKey) *ExternalSigner {
+	return &ExternalSigner{
+		version:   version,
+		publicKey: publicKey,
 	}
-	var err error
-	out.computedCPK, err = NewCPK(pubKey, signatureAlgorithm)
-	return out, err
 }
 
 func (e *ExternalSigner) Version() Version {
@@ -29,18 +22,18 @@ func (e *ExternalSigner) Version() Version {
 }
 
 func (e *ExternalSigner) SignatureAlgorithm() SignatureAlgorithm {
-	return e.signatureAlgorithm
+	return e.publicKey.Algorithm()
 }
 
 func (e *ExternalSigner) ComputeDigest(data *Payload) (digest []byte, payload []byte, err error) {
-	payload, err = e.version.Make(data.SetCPK(e.computedCPK))
+	payload, err = e.version.Make(data.SetCPK(e.publicKey.GetCPK()))
 	if err != nil {
 		return nil, nil, err
 	}
-	return e.signatureAlgorithm.Digest(payload), payload, nil
+	return e.SignatureAlgorithm().Digest(payload), payload, nil
 }
 
-func (e *ExternalSigner) ConstructSigned(payload []byte, signature []byte) (RawRTU, error) {
+func (e *ExternalSigner) ConstructSignedRaw(payload []byte, signature []byte) (RawRTU, error) {
 	obj, err := e.ConstructSignedObj(payload, signature)
 	if err != nil {
 		return nil, err
@@ -48,8 +41,8 @@ func (e *ExternalSigner) ConstructSigned(payload []byte, signature []byte) (RawR
 	return obj.Raw()
 }
 
-func (e *ExternalSigner) ConstructSignedPacked(payload []byte, signature []byte) (PackedRTU, error) {
-	raw, err := e.ConstructSigned(payload, signature)
+func (e *ExternalSigner) ConstructSigned(payload []byte, signature []byte) (PackedRTU, error) {
+	raw, err := e.ConstructSignedRaw(payload, signature)
 	if err != nil {
 		return "", err
 	}
@@ -67,19 +60,19 @@ func (e *ExternalSigner) ConstructSignedObj(payload []byte, signature []byte) (*
 	if err != nil {
 		return nil, err
 	}
-	if !bytes.Equal(parsedPayload.CPK(), e.computedCPK) {
+	if !bytes.Equal(parsedPayload.CPK(), e.publicKey.GetCPK()) {
 		return nil, fmt.Errorf("payload CPK is not equal to our public key: %w", ErrKeyInvalid)
 	}
 	// verify received signature with our public key
-	ok, err := e.signatureAlgorithm.Verify(e.pubKey, payload, signature)
+	ok, err := e.publicKey.Verify(payload, signature)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
 		return nil, ErrSignatureInvalid
 	}
-	alg := e.signatureAlgorithm
-	if e.signatureAlgorithm == e.version.DefaultSignatureAlgorithm() {
+	alg := e.SignatureAlgorithm()
+	if alg == e.version.DefaultSignatureAlgorithm() {
 		// do not set algorithm, if it is the same as default,
 		// as Algorithm is an optional field in RTU
 		alg = AlgorithmNone

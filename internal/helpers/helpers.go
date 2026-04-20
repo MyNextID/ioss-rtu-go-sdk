@@ -115,7 +115,7 @@ func MaxRTU() *rtu.Payload {
 		})
 }
 
-func SignedRTU(tb testing.TB) *rtu.RTU {
+func SignedRTUV1(tb testing.TB) *rtu.RTU {
 	tb.Helper()
 
 	out, err := rtu.SignV1(MinimalRTU(), GenerateRTUPrivateKey(tb))
@@ -125,8 +125,8 @@ func SignedRTU(tb testing.TB) *rtu.RTU {
 	return out
 }
 
-func SignedPackedRTU(tb testing.TB) rtu.PackedRTU {
-	out, err := SignedRTU(tb).Pack()
+func SignedPackedRTUV1(tb testing.TB) rtu.PackedRTU {
+	out, err := SignedRTUV1(tb).Pack()
 	if err != nil {
 		tb.Fatalf("failed to pack RTU: %v", err)
 	}

@@ -42,7 +42,7 @@ func TestAlgorithmEcdsaP256_VerifyValidSignature(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	verified, err := rtu.AlgorithmEcdsaP256.Verify(priv.PublicKey(), payload, signature)
+	verified, err := priv.Verify(payload, signature)
 	if err != nil {
 		t.Errorf("Verify() unexepected error, got %v", err)
 	} else if !verified {
@@ -68,7 +68,7 @@ func TestAlgorithmEcdsaP256_VerifyInvalidSignature(t *testing.T) {
 	// tamper with signature
 	signature[len(signature)/2] ^= 0xFF
 
-	verified, err := rtu.AlgorithmEcdsaP256.Verify(priv.PublicKey(), payload, signature)
+	verified, err := priv.Verify(payload, signature)
 	if err != nil {
 		t.Errorf("Verify() unexepected error, got %v", err)
 	} else if verified {
