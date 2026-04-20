@@ -176,19 +176,19 @@ END
 
 Payload definitions and validations used in `Version1`
 
-| Field               | Type       | Required | Constraints                                                                                           |
-|---------------------|------------|----------|-------------------------------------------------------------------------------------------------------|
-| `CPK`               | `[]byte`   | internal | Set automatically by `Sign` and `ComputeDigest`; 33-byte compressed P-256 public key — see note below |
-| `DelegatedUse`      | `bool`     | yes      | No constraints                                                                                        |
-| `SellerName`        | `string`   | no       | Max 100 characters                                                                                    |
-| `SellerAddress`     | `string`   | no       | Max 100 characters                                                                                    |
-| `TransactionID`     | `string`   | yes      | 1–50 characters                                                                                       |
-| `ValidUntil`        | `int64`    | yes      | Unix timestamp strictly in the future                                                                 |
-| `LimitDeliveryArea` | `string`   | no       | Must match `^[A-Z]{2}-[A-Z0-9]{1,4}$`                                                                 |
-| `ConsignmentIDs`    | `[]string` | no       | Max 10 items; each 1–35 characters; no duplicates                                                     |
-| `LimitConsignments` | `int`      | no       | 1–100 when set                                                                                        |
+| Field               | Type       | Required  | Constraints                                                                                               |
+|---------------------|------------|-----------|-----------------------------------------------------------------------------------------------------------|
+| `CPK`               | `[]byte`   | internal  | Set automatically by `Signer` and `*ExternalSigner.ComputeDigest`; value is based on `SignatureAlgorithm` |
+| `DelegatedUse`      | `bool`     | yes       | No constraints                                                                                            |
+| `SellerName`        | `string`   | no        | Max 100 characters                                                                                        |
+| `SellerAddress`     | `string`   | no        | Max 100 characters                                                                                        |
+| `TransactionID`     | `string`   | yes       | 1–50 characters                                                                                           |
+| `ValidUntil`        | `int64`    | yes       | Unix timestamp strictly in the future                                                                     |
+| `LimitDeliveryArea` | `string`   | no        | Must match `^[A-Z]{2}-[A-Z0-9]{1,4}$`                                                                     |
+| `ConsignmentIDs`    | `[]string` | no (excl) | Max 10 items; each 1–35 characters; no duplicates                                                         |
+| `LimitConsignments` | `int`      | no (excl) | 1–100 when set                                                                                            |
 
-NOTE: `ConsignmentIDs` and `LimitConsignments` are exclusive. If both are set, a ValidationError is returned
+NOTE: `ConsignmentIDs` and `LimitConsignments` are exclusive. If both are set, a ValidationError is returned on `LimitConsignments`
 
 #### SignedObject Limits
 
