@@ -52,7 +52,7 @@ SignedData ::= SEQUENCE {
     algorithm   UTF8String OPTIONAL
 }
 ```
-
+---
 ### Payload
 
 ```go
@@ -70,6 +70,8 @@ Each `Version` supported in this library should be able to parse its own data st
 an interface that allows conversion to `rtu.Payload`. See the CONTRIBUTION section for more details on `SchemaPayload` and
 how to add a new version
 
+---
+
 ### SignatureAlgorithms
 
 This SDK has a `PublicKey` and `PrivateKey` structure to help join correct CPK and keys to its rightful `SignatureAlgorithm`
@@ -84,6 +86,8 @@ const (
 
 SignatureAlgorithms define a signature algorithm type. It also implements `Digest` method, which returns a digest of a payload
 based on the signature type. Example: `rtu.AlgorithmEcdsaP256` returns a SHA256 digest, to be signed with an ECDSA private key.
+
+---
 
 ### CPK
 
@@ -102,6 +106,7 @@ var key *ecdsa.PublicKey // key is on P-256 curve
 
 var cpk CPK = elliptic.MarshalCompressed(key.Curve, key.X, key.Y)
 ```
+---
 
 ### Keys
 
@@ -109,6 +114,7 @@ var cpk CPK = elliptic.MarshalCompressed(key.Curve, key.X, key.Y)
 
 `PrivateKey` is the same as `PublicKey` but also adds the correct privateKey into the combination.
 
+---
 ## Versions
 
 For future improvements to the RTU structure and/or adding signature support, each `rtu.RTU` signed object has a `Version` property,
@@ -199,6 +205,7 @@ NOTE: `ConsignmentIDs` and `LimitConsignments` are exclusive. If both are set, a
 | `version1MaxEncodedRTUBytes`        | `750` | Max DER size of `RTU.Payload` for QR code compatibility |
 | `version1MaxEncodedSignedDataBytes` | `830` | Max DER size of the full `RawRTU` envelope              |
 
+---
 
 ## Signers
 
@@ -279,6 +286,7 @@ if err != nil {
 
 // signedRtu is the rtu.PackedRTU, that can be used to send to rtu deposit service
 ```
+---
 
 ## Verify
 
