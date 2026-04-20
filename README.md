@@ -5,7 +5,7 @@
 **Status:** 🟢 Active  
 **Stack:** `Golang`  
 **Owners:** @zbrumen, @oriiyx  
-**Last reviewed:** 2026-04-17
+**Last reviewed:** 2026-04-20
 
 ---
 
@@ -124,9 +124,12 @@ const (
 
 ### Version 1
 
+The first version of an IOSS-RTU. 
+It only supports `AlgorithmEcdsaP256` SignatureAlgorithm and enforces the `Algorithm` property inside `RTU` to be empty.
+
 #### Payload schema
 
-ASN.1 Schema:
+ASN.1 Schema of the payload in `Version1`:
 ```asn1
 IOSSRTUVersion1 DEFINITIONS IMPLICIT TAGS ::= BEGIN
 
@@ -168,6 +171,34 @@ IOSSRTU ::= SEQUENCE {
 }
 END
 ```
+
+#### Definitions
+
+Payload definitions and validations used in `Version1`
+
+| Field               | Type       | Required | Constraints                                                                                           |
+|---------------------|------------|----------|-------------------------------------------------------------------------------------------------------|
+| `CPK`               | `[]byte`   | internal | Set automatically by `Sign` and `ComputeDigest`; 33-byte compressed P-256 public key — see note below |
+| `DelegatedUse`      | `bool`     | yes      | No constraints                                                                                        |
+| `SellerName`        | `string`   | no       | Max 100 characters                                                                                    |
+| `SellerAddress`     | `string`   | no       | Max 100 characters                                                                                    |
+| `TransactionID`     | `string`   | yes      | 1–50 characters                                                                                       |
+| `ValidUntil`        | `int64`    | yes      | Unix timestamp strictly in the future                                                                 |
+| `LimitDeliveryArea` | `string`   | no       | Must match `^[A-Z]{2}-[A-Z0-9]{1,4}$`                                                                 |
+| `ConsignmentIDs`    | `[]string` | no       | Max 10 items; each 1–35 characters; no duplicates                                                     |
+| `LimitConsignments` | `int`      | no       | 1–100 when set                                                                                        |
+
+NOTE: `ConsignmentIDs` and `LimitConsignments` are exclusive. If both are set, a ValidationError is returned
+
+#### SignedObject Limits
+
+`rtu.RTU` object limits and finalSize limit used by `Version1`
+
+| Constant                            | Value | Description                                             |
+|-------------------------------------|-------|---------------------------------------------------------|
+| `version1MaxEncodedRTUBytes`        | `750` | Max DER size of `RTU.Payload` for QR code compatibility |
+| `version1MaxEncodedSignedDataBytes` | `830` | Max DER size of the full `RawRTU` envelope              |
+
 
 ## Signers
 
@@ -248,6 +279,69 @@ if err != nil {
 
 // signedRtu is the rtu.PackedRTU, that can be used to send to rtu deposit service
 ```
+
+## Verify
+
+The below code is a simple example of how verification and validation of an `PackedRTU` can be achieved using this SDK
+```go
+var packedRtu rtu.PackedRTU = "...base64url_encoded_rtu..."
+
+signedObj, err := packedRtu.Unpack()
+if err != nil {
+	// error here means the rtu encoding was bad, or validation of the signedObject went wrong (rtuSize and payloadSize are version specific)
+	panic(err)
+}
+
+payload, err := signedObj.Parse(true)
+if err != nil {
+	// error here means the payload was malformed, signature was bad or the payload structure fields were invalid
+	// (validUntil field is no longer valid, transactionId field is empty or is too large, CPK malformed etc.)
+    // validation errors return an *rtu.ValidationError error, which has the exact fields that was bad
+	panic(err)
+}
+
+// payload is a rtu.Payload object, and has been validated and verified
+```
+
+NOTE: Certain validations and verifications can be skipped, by parsing with extra steps, and always putting `withValidations: false`.
+This is usually not recommended, but in case where the source is trusted, it can improve performance.
+
+```go
+// No verification/validation parsing of RTU (don't use it unless you know what you are doing!)
+
+var packedRtu rtu.PackedRTU = "...base64url_encoded_rtu..."
+
+rawRtu, err := packedRtu.Raw()
+if err != nil {
+	// only base64url decoding error possible here
+	panic(err)
+}
+
+signedObj, err := rawRtu.Parse(false)
+if err != nil {
+	// only asn.1 decoding error possible here (no signedObject validations)
+	panic(err)
+}
+
+payload, err := signedObj.Parse(false)
+if err != nil {
+	// only asn.1 decoding error here (no validation)
+	panic(err)
+}
+```
+
+---
+
+## Testing
+Run the full test suite from the repo root:
+
+> go test ./sdk/... -race
+
+Run with benchmarks:
+
+> go test ./sdk/... -bench=. -benchmem
+
+The SDK test suite contains 52 test functions covering unit tests, integration round-trips, benchmark cases, and error handling paths. All tests are parallel-safe.
 
 ---
 
