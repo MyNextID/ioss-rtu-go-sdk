@@ -2,10 +2,24 @@
 
 > The SDK used to issue and verify/validate IOSS-RTU (Import One-Stop Shop Right To Use) tokens
 
-**Status:** 🟢 Active  
-**Stack:** `Golang`  
-**Owners:** @zbrumen, @oriiyx  
-**Last reviewed:** 2026-04-20
+## Install
+
+To install this library, you need to first `go get` the
+latest version:
+```shell
+go get github.com/MyNextID/ioss-rtu-go-sdk@latest
+```
+
+Next, include the library in you project:
+```go
+import rtu "github.com/MyNextID/ioss-rtu-go-sdk"
+```
+
+## Usage
+
+This library has 3 main usages: `Sign`, `SignExternally` and `Parse` an IOSSRTU token.
+
+All the examples can be found in the [examples](internal/examples) folder
 
 ---
 
@@ -112,7 +126,24 @@ var cpk CPK = elliptic.MarshalCompressed(key.Curve, key.X, key.Y)
 
 `PublicKey` is the combination of a SignatureAlgorithm with a publicKey `crypto.PublicKey` and a computedCPK `rtu.CPK`.
 
+```go
+type PublicKey struct {
+	pubKey crypto.PublicKey   
+	alg    SignatureAlgorithm
+
+	computedCPK CPK
+}
+```
+
 `PrivateKey` is the same as `PublicKey` but also adds the correct privateKey into the combination.
+
+```go
+type PrivateKey struct {
+	privKey any
+
+	PublicKey
+}
+```
 
 ---
 ## Versions
@@ -343,11 +374,11 @@ if err != nil {
 ## Testing
 Run the full test suite from the repo root:
 
-> go test ./sdk/... -race
+> go test ./... -race
 
 Run with benchmarks:
 
-> go test ./sdk/... -bench=. -benchmem
+> go test ./... -bench=. -benchmem
 
 The SDK test suite contains 52 test functions covering unit tests, integration round-trips, benchmark cases, and error handling paths. All tests are parallel-safe.
 
