@@ -72,13 +72,27 @@ SignedData ::= SEQUENCE {
 ```go
 // Payload is the structureless data container for all versions of RTU
 type Payload struct {
-	// unexported fields
+	// required info across all versions rtus
+	validUntil    time.Time
+	transactionID string
+
+	// cpk not nil means, this payload was signed.
+	// it should be set by signers, before Version.Make is called
+	cpk CPK
+
+	// optional keys
+	delegatedUse      *bool
+	sellerName        *string
+	sellerAddr        *string
+	limitDeliverArea  *string
+	consignmentIDs    []string
+	limitConsignments *int
 }
 ```
 
-`Payload` is a structure used to store all relevant data inside an `RTU.Payload`.
+`rtu.Payload` is a structure used to store all relevant data inside an `RTU.Payload`. It allows setting and getting of all stored information of an `IOSS-RTU`. See the [Definitions](#definitions) section for additional rules governing these fields.
 
-It allows setting and getting of all stored information of an `IOSS-RTU`
+
 
 Each `Version` supported in this library should be able to parse its own data structure into `rtu.SchemaPayload`, which is
 an interface that allows conversion to `rtu.Payload`. See the CONTRIBUTION section for more details on `SchemaPayload` and
@@ -88,7 +102,7 @@ how to add a new version
 
 ### SignatureAlgorithms
 
-This SDK has a `PublicKey` and `PrivateKey` structure to help join correct CPK and keys to its rightful `SignatureAlgorithm`
+This SDK has a `PublicKey` and `PrivateKey` structure to help join correct CPK (compressed public key) and keys to its rightful `SignatureAlgorithm`
 
 List of available SignatureAlgorithms:
 ```go
@@ -98,20 +112,20 @@ const (
 )
 ```
 
-SignatureAlgorithms define a signature algorithm type. It also implements `Digest` method, which returns a digest of a payload
+SignatureAlgorithms define a signature algorithm type. It also implements the `Digest` method, which returns a digest of the payload
 based on the signature type. Example: `rtu.AlgorithmEcdsaP256` returns a SHA256 digest, to be signed with an ECDSA private key.
 
 ---
 
 ### CPK
 
-CPK - Compressed Public Key is a raw byte array compressed representation of a public key.
+CPK (Compressed Public Key) is a raw byte array compressed representation of a public key.
 
 ```go
 type CPK []byte
 ```
 
-It has a method `Parse`, that allows recovery of a publicKey, with a given `SignatureAlgorithm` and returns a `rtu.PublicKey`
+It has a method `Parse`, that reconstructs the public key encoded in the CPK using the provided `SignatureAlgorithm`, and returns an `rtu.PublicKey`.
 
 
 Example: For the signature algorithm `rtu.AlgorithmEcdsaP256`, the CPK value is:
@@ -124,7 +138,7 @@ var cpk CPK = elliptic.MarshalCompressed(key.Curve, key.X, key.Y)
 
 ### Keys
 
-`PublicKey` is the combination of a SignatureAlgorithm with a publicKey `crypto.PublicKey` and a computedCPK `rtu.CPK`.
+`rtu.PublicKey` is the combination of a SignatureAlgorithm with a publicKey `crypto.PublicKey` and a computedCPK `rtu.CPK`.
 
 ```go
 type PublicKey struct {
@@ -135,7 +149,7 @@ type PublicKey struct {
 }
 ```
 
-`PrivateKey` is the same as `PublicKey` but also adds the correct privateKey into the combination.
+`rtu.PrivateKey` extends `rtu.PublicKey` by additionally including the corresponding private key material.
 
 ```go
 type PrivateKey struct {
@@ -289,12 +303,16 @@ packedRtu, err := rtu.Sign(rtu.Version1, paylaod, privateKey)
 `ExternalSigner` is a service, that enables issuers to sign via an external private key. It needs the `rtu.PublicKey` representation
 of the external signer's public key, and the version of the RTU object it is producing. 
 
-You can then use its methods `ComputeDigest` to generate the correct digest to sign and the raw payload, that was constructed from `rtu.Payload`.
-Signing the digest with the correct private key, and offering the signature along with the given raw payload into `ConstructSigned` allows the signer
-to validate your signature (and validate it was signed with the correct private key) and construct the correct RTU object.
+You can use its `ComputeDigest` method to generate the digest that must be signed, as well as the raw payload derived from `rtu.Payload`.
 
-`ConstructSigned` returns a PackedRTU for easier usage, to get a `RawRTU` use `ConstructSignedRaw`,
-or if you wish to get an `rtu.RTU` object, use `ConstructSignedObj`.
+Once the digest is signed with the appropriate private key, the resulting signature (together with the raw payload) can be passed into `ConstructSigned`. This allows the signer to verify that the signature is valid (produced using the correct private key), and then construct the corresponding RTU object.
+
+`ConstructSigned` returns a `PackedRTU` for easier handling.
+
+If you need a `RawRTU`, use `ConstructSignedRaw`.
+
+If you want a fully parsed `rtu.RTU` object, use `ConstructSignedObj`.
+
 
 ```go
 var publicKey rtu.PublicKey // get public key for your signer, import *ecdsa.PublicKey with rtu.NewECPublicKey(publicKey)
