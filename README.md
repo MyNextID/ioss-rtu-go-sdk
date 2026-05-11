@@ -102,9 +102,7 @@ type Payload struct {
 
 
 Each `Version` supported in this library should be able to parse its own data structure into `rtu.SchemaPayload`, which is
-an interface that allows conversion to `rtu.Payload`. See the CONTRIBUTION section for more details on `SchemaPayload` and
-how to add a new version
-
+an interface that allows conversion to `rtu.Payload`.
 ---
 
 ### SignatureAlgorithms
