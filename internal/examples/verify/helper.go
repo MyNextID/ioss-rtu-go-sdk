@@ -4,17 +4,13 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"fmt"
 	"time"
 
 	rtu "github.com/MyNextID/ioss-rtu-go-sdk"
 )
 
-/*
-This example generates an *ecdsa.PrivateKey, prepares an example rtu.Payload, and signs it with the key, creating an
-*rtu.RTU object, which is packed into rtu.PackedRTU (which is ready to be sent)
-*/
-func main() {
+// A helper function to generate the PackedRTU to parse in this example
+func generateAValidPackedRTU() rtu.PackedRTU {
 	// generate an example ecdsa.PrivateKey (you would use your valid IOSS private key here)
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -41,6 +37,5 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	// output your signed rtu
-	fmt.Println(packedRtu)
+	return packedRtu
 }

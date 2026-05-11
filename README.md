@@ -19,7 +19,14 @@ import rtu "github.com/MyNextID/ioss-rtu-go-sdk"
 
 This library has 3 main usages: `Sign`, `SignExternally` and `Parse` an IOSSRTU token.
 
-All the examples can be found in the [examples](internal/examples) folder
+All the examples can be found in the [examples](internal/examples) folder.
+
+Short descriptions for examples:
+* **external-signer** — Demonstrates how to use `rtu.ExternalSigner` to prepare an unsigned `rtu.Payload`, export its ASN.1 DER encoded payload and digest for signing with an external private key, and reconstruct the final signed `rtu.PackedRTU` from the returned signature.
+
+* **signer** — Shows how to sign an `rtu.Payload` directly using a `PrivateKey`, producing a fully signed `rtu.PackedRTU` object.
+
+* **verify** — Demonstrates how to verify an `rtu.PackedRTU` (a Base64URL-encoded ASN.1 DER encoded `*rtu.RTU`) by validating its structure and verifying its signature.
 
 ---
 
@@ -102,7 +109,14 @@ how to add a new version
 
 ### SignatureAlgorithms
 
-This SDK has a `PublicKey` and `PrivateKey` structure to help join correct CPK (compressed public key) and keys to its rightful `SignatureAlgorithm`
+The SDK provides `PublicKey` and `PrivateKey` structs that bind cryptographic keys to their corresponding SignatureAlgorithm.
+
+`PublicKey` wraps a compressed public key (CPK), the underlying public key implementation (such as `*ecdsa.PublicKey` or `*ed25519.PublicKey`), 
+and its associated `SignatureAlgorithm`.
+
+`PrivateKey` embeds a `PublicKey` and extends it with the corresponding private key implementation (such as `*ecdsa.PrivateKey` or `*ed25519.PrivateKey`).
+
+This design ensures that public/private key pairs are always associated with the correct signature algorithm.
 
 List of available SignatureAlgorithms:
 ```go
@@ -254,12 +268,17 @@ NOTE: `ConsignmentIDs` and `LimitConsignments` are exclusive. If both are set, a
 
 ## Signers
 
+This SDK has a `Signer` defined as a function below:
+
+```go
+type Signer func(payload *Payload, key *PrivateKey) (*RTU, error)
+```
+
 ### SignV1
 
-`SignV1` is a `rtu.Signer` function, that signs a `rtu.Payload` with an ECDSA-P256 private key (version 1 only supports that algorithm),
-and creates a `rtu.Version1` RTU
+`SignV1` is a `rtu.Signer` function, that signs a `rtu.Payload` as a `rtu.Version1` IOSSRTU. 
+It accepts an ECDSA-P256 private key (version 1 only supports that algorithm)
 ```go
-
 key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 if err != nil {
 	panic(err)
@@ -278,8 +297,10 @@ signedRtu, err := rtu.SignV1(payload, privateKey)
 
 ### Sign
 
-`Sign` is a helper function, that takes a `rtu.Version`, `rtu.Payload` and `rtu.PrivateKey` variable, and generates a `rtu.PackedRTU`
+`Sign` is a ease of use function, that allows `rtu.Version` to be given as a parameter along with `rtu.Payload` and `rtu.PrivateKey`, 
+to generate a `rtu.PackedRTU`
 
+Usage:
 ```go
 key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 if err != nil {
@@ -295,7 +316,6 @@ payload := rtu.NewPayload("TX_ID", time.Now().Add(time.Hour)).SetDelegatedUse(fa
 
 // Sign the payload as an Version1 RTU object, with the given privateKey
 packedRtu, err := rtu.Sign(rtu.Version1, paylaod, privateKey)
-
 ```
 
 ### External Signer
