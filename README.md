@@ -10,7 +10,7 @@ latest version:
 go get github.com/MyNextID/ioss-rtu-go-sdk@latest
 ```
 
-Next, include the library in you project:
+Next, include the library in your project:
 ```go
 import rtu "github.com/MyNextID/ioss-rtu-go-sdk"
 ```
@@ -103,6 +103,7 @@ type Payload struct {
 
 Each `Version` supported in this library should be able to parse its own data structure into `rtu.SchemaPayload`, which is
 an interface that allows conversion to `rtu.Payload`.
+
 ---
 
 ### SignatureAlgorithms
@@ -178,7 +179,7 @@ For future improvements to the RTU structure and/or adding signature support, ea
 which defines the signature type, signature algorithms supported, maxRTUSize, maxRTUPayload size and payload structure along with 
 all the validation rules for the fields inside the correct payload structure.
 
-Currently this library support IOSS-RTU Versions:
+Currently this library supports IOSS-RTU Versions:
 ```go
 const (
 	Version1 Version = 1
@@ -295,7 +296,7 @@ signedRtu, err := rtu.SignV1(payload, privateKey)
 
 ### Sign
 
-`Sign` is a ease of use function, that allows `rtu.Version` to be given as a parameter along with `rtu.Payload` and `rtu.PrivateKey`, 
+`Sign` is an ease-of-use function, that allows `rtu.Version` to be given as a parameter along with `rtu.Payload` and `rtu.PrivateKey`, 
 to generate a `rtu.PackedRTU`
 
 Usage:
@@ -313,7 +314,7 @@ if err != nil {
 payload := rtu.NewPayload("TX_ID", time.Now().Add(time.Hour)).SetDelegatedUse(false)
 
 // Sign the payload as an Version1 RTU object, with the given privateKey
-packedRtu, err := rtu.Sign(rtu.Version1, paylaod, privateKey)
+packedRtu, err := rtu.Sign(rtu.Version1, payload, privateKey)
 ```
 
 ### External Signer
@@ -371,7 +372,7 @@ payload, err := signedObj.Parse(true)
 if err != nil {
 	// error here means the payload was malformed, signature was bad or the payload structure fields were invalid
 	// (validUntil field is no longer valid, transactionId field is empty or is too large, CPK malformed etc.)
-    // validation errors return an *rtu.ValidationError error, which has the exact fields that was bad
+    // validation errors return an *rtu.ValidationError error, which has the exact fields that were invalid
 	panic(err)
 }
 
