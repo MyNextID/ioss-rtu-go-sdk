@@ -10,6 +10,10 @@ import (
 	rtu "github.com/MyNextID/ioss-rtu-go-sdk"
 )
 
+/*
+This example generates an *ecdsa.PrivateKey, prepares an example rtu.Payload, generates a digest and raw payload from ExternalSigner,
+hands it off to be signed by "a different service", and uses the raw payload and signature to create a signed rtu.PackedRTU
+*/
 func main() {
 	// generate an example ecdsa.PrivateKey (you would use your valid IOSS private key here)
 	externalKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
