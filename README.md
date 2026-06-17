@@ -19,30 +19,31 @@ Table of Contents
 -----------------
 
 - [IOSS RTU Go SDK](#ioss-rtu-go-sdk)
-    - [Table of Contents](#table-of-contents)
-    - [Requirements](#requirements)
-    - [Installation](#installation)
-    - [Quickstart](#quickstart)
-    - [API Overview](#api-overview)
-    - [Data Types](#data-types)
-        - [Payload](#payload)
-        - [RTU](#rtu)
-        - [Key types](#key-types)
-    - [Signing Workflows](#signing-workflows)
-        - [Internal signing](#internal-signing)
-        - [Verification](#verification)
-        - [External / HSM signing](#external--hsm-signing)
-    - [Key Loading](#key-loading)
-        - [PEM — private key](#pem--private-key)
-        - [Compressed public key](#compressed-public-key)
-        - [Deriving the public key from a private key](#deriving-the-public-key-from-a-private-key)
-    - [Versions](#versions)
-    - [Size Limits](#size-limits)
-    - [Errors](#errors)
-    - [ASN.1 Schema](#asn1-schema)
-    - [Building from Source](#building-from-source)
-    - [Testing](#testing)
-    - [License](#license)
+	- [Table of Contents](#table-of-contents)
+	- [Requirements](#requirements)
+	- [Installation](#installation)
+	- [Quickstart](#quickstart)
+	- [API Overview](#api-overview)
+	- [Data Types](#data-types)
+		- [Payload](#payload)
+		- [RTU](#rtu)
+		- [Key types](#key-types)
+	- [Signing Workflows](#signing-workflows)
+		- [Internal signing](#internal-signing)
+		- [Verification](#verification)
+		- [External / HSM signing](#external--hsm-signing)
+	- [Key Loading](#key-loading)
+		- [PEM — private key](#pem--private-key)
+		- [Compressed public key](#compressed-public-key)
+		- [Deriving the public key from a private key](#deriving-the-public-key-from-a-private-key)
+	- [Versions](#versions)
+		- [Version 1](#version-1)
+	- [Size Limits](#size-limits)
+	- [Errors](#errors)
+	- [ASN.1 Schema](#asn1-schema)
+	- [Building from Source](#building-from-source)
+	- [Testing](#testing)
+	- [License](#license)
 
 Requirements
 ------------
@@ -136,6 +137,8 @@ Sentinel errors can be matched with `errors.Is`, and field-level failures are re
 
 The typical call sequence follows one of the signing workflows described in [Signing Workflows](#signing-workflows).
 
+<!-- NOTE: add a description about what is in the table below. Maybe an explanation that these are internal functions, not exposed APIs (if this is true) or something like that. What does the type column mean - what is package, *RTU, PackedRTU ... these types need to be explained somewhere (link to point in text). The same goes for the function inputs: e.g. is key == ecdsa.PublicKey?. Also the return objects should have their own column. Usually these things are in the OpenAPI spec. Does something similar exist to document the internal functions (maybe even use the open API somehow)? In the current form it's not presented well enough: either omit some details and just put function name and its purpose, or define all inputs and outputs.-->
+
 | Type              | Function                              | Purpose                                                        |
 |-------------------|---------------------------------------|----------------------------------------------------------------|
 | package           | `NewPayload(txID, validUntil)`        | Create a credential payload                                    |
@@ -191,6 +194,8 @@ The wire-format envelope wrapping a DER-encoded `Payload` together with its ECDS
 It corresponds to the `SignedData` ASN.1 structure. Callers do not normally build `RTU` by hand — it is produced by
 `SignV1` / `Sign` and `ExternalSigner`, and consumed via `Parse`.
 
+<!-- Note: when refering to functions indicate that they are functions: e.g. Sign -> Sign(). This makes a distinction between functions and objects. Maybe there is a better way, but we need a clear distinction. Apply this to the whole text.  -->
+
 ```go
 type RTU struct {
 	Version   Version            // schema id; determines how Payload is parsed
@@ -223,7 +228,7 @@ private key is available in-process, or **external signing** when the key is man
 Use `SignV1` when the private key is available in-process (or `Sign` to select the version explicitly). The function:
 
 1. Derives the compressed public key (CPK) from `key` and embeds it in the payload.
-2. Validates all fields on the `Payload` (see [Data Types](#data-types) for constraints).
+2. Validates all fields in the `Payload` (see [Data Types](#data-types) for constraints).
 3. ASN.1 DER-encodes the `IOSSRTU` payload.
 4. Computes a SHA-256 digest of the encoded payload.
 5. Produces a DER-encoded ECDSA P-256 signature over the digest.
@@ -249,7 +254,7 @@ if err != nil {
 	panic(err)
 }
 ```
-
+<!-- NOTE: this following text is confusing. CPK was already created in the first step -->
 After signing, the CPK in the payload is derived from `key`. Do not set the CPK manually before calling `SignV1` — it
 will be overwritten.
 
@@ -287,7 +292,7 @@ This is not recommended unless you control the source — see the lower-level `P
 
 ### External / HSM signing
 
-Use `ExternalSigner` when the private key is held in a hardware security module (HSM) or remote signing service. The
+Use `ExternalSigner` when the private key is held in a hardware security module (HSM) or a remote signing service. The
 signer needs only the version and the `PublicKey` of the external key.
 
 **Step 1 — compute the digest:**
