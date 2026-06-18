@@ -8,7 +8,7 @@ ASN.1 DER-encoded `RTU` (`SignedData`) output suitable for base64url encoding an
 
 - ECDSA P-256 signing and verification (Go standard library `crypto/ecdsa`)
 - ASN.1 DER encode/decode for the `IOSSRTU` payload and `SignedData` envelope — byte-compatible with the Java and C SDKs
-- External / HSM signing workflow via `ExternalSigner.ComputeDigest` + `ExternalSigner.ConstructSigned`
+- External / HSM signing workflow via `ExternalSigner.ComputeDigest()` + `ExternalSigner.ConstructSigned()`
 - Key loading from PEM (SEC1 and PKCS#8)
 - Compressed P-256 public key encode/decode
 - QR code compatibility — encoded output enforced under size limits
@@ -19,31 +19,31 @@ Table of Contents
 -----------------
 
 - [IOSS RTU Go SDK](#ioss-rtu-go-sdk)
-	- [Table of Contents](#table-of-contents)
-	- [Requirements](#requirements)
-	- [Installation](#installation)
-	- [Quickstart](#quickstart)
-	- [API Overview](#api-overview)
-	- [Data Types](#data-types)
-		- [Payload](#payload)
-		- [RTU](#rtu)
-		- [Key types](#key-types)
-	- [Signing Workflows](#signing-workflows)
-		- [Internal signing](#internal-signing)
-		- [Verification](#verification)
-		- [External / HSM signing](#external--hsm-signing)
-	- [Key Loading](#key-loading)
-		- [PEM — private key](#pem--private-key)
-		- [Compressed public key](#compressed-public-key)
-		- [Deriving the public key from a private key](#deriving-the-public-key-from-a-private-key)
-	- [Versions](#versions)
-		- [Version 1](#version-1)
-	- [Size Limits](#size-limits)
-	- [Errors](#errors)
-	- [ASN.1 Schema](#asn1-schema)
-	- [Building from Source](#building-from-source)
-	- [Testing](#testing)
-	- [License](#license)
+    - [Table of Contents](#table-of-contents)
+    - [Requirements](#requirements)
+    - [Installation](#installation)
+    - [Quickstart](#quickstart)
+    - [API Overview](#api-overview)
+    - [Data Types](#data-types)
+        - [Payload](#payload)
+        - [RTU](#rtu)
+        - [Key types](#key-types)
+    - [Signing Workflows](#signing-workflows)
+        - [Internal signing](#internal-signing)
+        - [Verification](#verification)
+        - [External / HSM signing](#external--hsm-signing)
+    - [Key Loading](#key-loading)
+        - [PEM — private key](#pem--private-key)
+        - [Compressed public key](#compressed-public-key)
+        - [Deriving the public key from a private key](#deriving-the-public-key-from-a-private-key)
+    - [Versions](#versions)
+        - [Version 1](#version-1)
+    - [Size Limits](#size-limits)
+    - [Errors](#errors)
+    - [ASN.1 Schema](#asn1-schema)
+    - [Building from Source](#building-from-source)
+    - [Testing](#testing)
+    - [License](#license)
 
 Requirements
 ------------
@@ -74,8 +74,8 @@ Quickstart
 At a high level, the signing workflow is:
 
 1. Load a P-256 private key into a `*rtu.PrivateKey` (see [Key Loading](#key-loading)).
-2. Build a `*rtu.Payload` with `rtu.NewPayload` and the chainable `Set*` methods.
-3. Call `rtu.SignV1` to produce the signed `*rtu.RTU`, then `Pack()` it to a base64url token for QR encoding or transport.
+2. Build a `*rtu.Payload` with `rtu.NewPayload()` and the chainable `Set*()` methods.
+3. Call `rtu.SignV1()` to produce the signed `*rtu.RTU`, then `Pack()` it to a base64url token for QR encoding or transport.
 
 `internal/examples/signer/main.go` is a self-contained starting point you can copy into your own project: it generates
 a key, signs a credential, and prints the base64url token ready for QR encoding. Companion examples for verification and
@@ -132,35 +132,40 @@ API Overview
 
 The SDK returns errors as values rather than panicking — signing, verification, validation, and key loading all return
 an `error` that callers are expected to handle, because silent failures are unacceptable in customs and tax contexts.
-Sentinel errors can be matched with `errors.Is`, and field-level failures are returned as `*rtu.ValidationError`; see
+Sentinel errors can be matched with `errors.Is()`, and field-level failures are returned as `*rtu.ValidationError`; see
 [Errors](#errors) for the full list.
 
 The typical call sequence follows one of the signing workflows described in [Signing Workflows](#signing-workflows).
 
-<!-- NOTE: add a description about what is in the table below. Maybe an explanation that these are internal functions, not exposed APIs (if this is true) or something like that. What does the type column mean - what is package, *RTU, PackedRTU ... these types need to be explained somewhere (link to point in text). The same goes for the function inputs: e.g. is key == ecdsa.PublicKey?. Also the return objects should have their own column. Usually these things are in the OpenAPI spec. Does something similar exist to document the internal functions (maybe even use the open API somehow)? In the current form it's not presented well enough: either omit some details and just put function name and its purpose, or define all inputs and outputs.-->
+The table below is a quick reference to the SDK's exported API — the functions and methods you call directly. Every
+symbol is documented in full, with examples, on [pkg.go.dev](https://pkg.go.dev/github.com/MyNextID/ioss-rtu-go-sdk) or
+locally via `go doc`. The **Receiver** column shows where each entry lives: `package` marks a package-level function
+(called as `rtu.SignV1(...)`), while a type such as `*RTU` or `PackedRTU` marks a method on a value of that type
+(called as `signed.Pack()`). All receiver and parameter types are described in [Data Types](#data-types).
 
-| Type              | Function                              | Purpose                                                        |
-|-------------------|---------------------------------------|----------------------------------------------------------------|
-| package           | `NewPayload(txID, validUntil)`        | Create a credential payload                                    |
-| package           | `LoadPrivateKeyPEM(pem)`              | Load a P-256 private key from PEM (SEC1 or PKCS#8)             |
-| package           | `NewECPrivateKey(*ecdsa.PrivateKey)`  | Wrap a raw P-256 private key                                   |
-| package           | `NewECPublicKey(*ecdsa.PublicKey)`    | Wrap a raw P-256 public key (for external signing)             |
-| package           | `SignV1(payload, key)`                | Validate, derive CPK, sign, return `*RTU`                      |
-| package           | `Sign(version, payload, key)`         | Validate and sign for a given version, return `PackedRTU`      |
-| `*RTU`            | `Parse(withValidations)`              | Verify signature, validate fields, return `*Payload`           |
-| `*RTU`            | `Pack()`                              | ASN.1 DER-encode and base64url-encode, return `PackedRTU`      |
-| `PackedRTU`       | `Unpack()`                            | Decode and validate the envelope, return `*RTU`                |
-| `*ExternalSigner` | `ComputeDigest(payload)`              | Encode payload and return the SHA-256 digest (for HSM signing) |
-| `*ExternalSigner` | `ConstructSigned(payload, signature)` | Assemble a `PackedRTU` from payload and external signature     |
-| `PrivateKey`      | `GetCPK()` / `GetPublicKey()`         | Derive the compressed / raw public key from a private key      |
-| `CPK`             | `Parse(algorithm)`                    | Recover a `PublicKey` from a compressed public key             |
+| Receiver          | Function            | Parameters                                           | Returns                                | Purpose                                                        |
+|-------------------|---------------------|------------------------------------------------------|----------------------------------------|----------------------------------------------------------------|
+| `package`         | `NewPayload`        | `txID string, validUntil time.Time`                  | `*Payload`                             | Create a credential payload                                    |
+| `package`         | `LoadPrivateKeyPEM` | `pemBytes []byte`                                    | `*PrivateKey, error`                   | Load a P-256 private key from PEM (SEC1 or PKCS#8)             |
+| `package`         | `NewECPrivateKey`   | `priv *ecdsa.PrivateKey`                             | `*PrivateKey, error`                   | Wrap a raw P-256 private key                                   |
+| `package`         | `NewECPublicKey`    | `pub *ecdsa.PublicKey`                               | `PublicKey, error`                     | Wrap a raw P-256 public key (for external signing)             |
+| `package`         | `SignV1`            | `payload *Payload, key *PrivateKey`                  | `*RTU, error`                          | Validate, derive CPK, sign                                     |
+| `package`         | `Sign`              | `version Version, payload *Payload, key *PrivateKey` | `PackedRTU, error`                     | Validate and sign for a given version                          |
+| `*RTU`            | `Parse`             | `withValidations bool`                               | `*Payload, error`                      | Verify signature, validate fields, return the payload          |
+| `*RTU`            | `Pack`              | —                                                    | `PackedRTU, error`                     | ASN.1 DER-encode then base64url-encode                         |
+| `PackedRTU`       | `Unpack`            | —                                                    | `*RTU, error`                          | Decode and validate the envelope                               |
+| `*ExternalSigner` | `ComputeDigest`     | `data *Payload`                                      | `digest []byte, payload []byte, error` | Encode payload and return its SHA-256 digest (for HSM signing) |
+| `*ExternalSigner` | `ConstructSigned`   | `payload []byte, signature []byte`                   | `PackedRTU, error`                     | Assemble a `PackedRTU` from payload and external signature     |
+| `PrivateKey`      | `GetCPK`            | —                                                    | `CPK`                                  | Derive the 33-byte compressed public key                       |
+| `PrivateKey`      | `GetPublicKey`      | —                                                    | `crypto.PublicKey`                     | Return the raw public key                                      |
+| `CPK`             | `Parse`             | `algorithm SignatureAlgorithm`                       | `PublicKey, error`                     | Recover a `PublicKey` from a compressed public key             |
 
 Data Types
 ----------
 
 ### Payload
 
-The credential payload. Build instances with `NewPayload` and the chainable `Set*` methods; the `cpk` field is set
+The credential payload. Build instances with `NewPayload()` and the chainable `Set*()` methods; the `cpk` field is set
 automatically by the signer — do not set it manually. Instances must pass validation before they can be signed.
 
 ```go
@@ -192,9 +197,7 @@ payload := rtu.NewPayload("TX-001", time.Now().Add(24*time.Hour)). // transactio
 
 The wire-format envelope wrapping a DER-encoded `Payload` together with its ECDSA-SHA256 signature and a version tag.
 It corresponds to the `SignedData` ASN.1 structure. Callers do not normally build `RTU` by hand — it is produced by
-`SignV1` / `Sign` and `ExternalSigner`, and consumed via `Parse`.
-
-<!-- Note: when refering to functions indicate that they are functions: e.g. Sign -> Sign(). This makes a distinction between functions and objects. Maybe there is a better way, but we need a clear distinction. Apply this to the whole text.  -->
+`SignV1()` / `Sign()` and `ExternalSigner`, and consumed via `Parse()`.
 
 ```go
 type RTU struct {
@@ -214,7 +217,7 @@ P-256 keys are wrapped in `PrivateKey` and `PublicKey`, which bind a raw `crypto
 precomputed CPK. Keys on any curve other than P-256 (secp256r1) are rejected with `ErrKeyInvalid`.
 
 The compressed public key (CPK) embedded in the payload is 33 bytes: a one-byte prefix (`0x02` for even Y, `0x03` for
-odd Y) followed by the 32-byte X coordinate. Use `PublicKey.GetCPK` to obtain the compressed form and `CPK.Parse` to
+odd Y) followed by the 32-byte X coordinate. Use `PublicKey.GetCPK()` to obtain the compressed form and `CPK.Parse()` to
 recover a `PublicKey` from it.
 
 Signing Workflows
@@ -225,7 +228,7 @@ private key is available in-process, or **external signing** when the key is man
 
 ### Internal signing
 
-Use `SignV1` when the private key is available in-process (or `Sign` to select the version explicitly). The function:
+Use `SignV1()` when the private key is available in-process (or `Sign()` to select the version explicitly). The function:
 
 1. Derives the compressed public key (CPK) from `key` and embeds it in the payload.
 2. Validates all fields in the `Payload` (see [Data Types](#data-types) for constraints).
@@ -254,13 +257,12 @@ if err != nil {
 	panic(err)
 }
 ```
-<!-- NOTE: this following text is confusing. CPK was already created in the first step -->
-After signing, the CPK in the payload is derived from `key`. Do not set the CPK manually before calling `SignV1` — it
-will be overwritten.
+Do not set the CPK on the payload manually before calling `SignV1()` — the signer derives it from `key` and overwrites
+any value you set.
 
 ### Verification
 
-Use `PackedRTU.Unpack` to decode and validate the envelope, then `RTU.Parse(true)` to verify the signature and validate
+Use `PackedRTU.Unpack()` to decode and validate the envelope, then `RTU.Parse(true)` to verify the signature and validate
 the credential payload:
 
 ```go
@@ -287,8 +289,8 @@ public key from the embedded CPK, and verify the ECDSA signature over the payloa
 (`ErrDecoding`, `ErrSignatureInvalid`, or a `*ValidationError`).
 
 If the source is trusted, validation can be skipped for performance by parsing with `withValidations` set to `false`.
-This is not recommended unless you control the source — see the lower-level `PackedRTU.Raw`, `RawRTU.Parse`, and
-`Version.Parse` methods.
+This is not recommended unless you control the source — see the lower-level `PackedRTU.Raw()`, `RawRTU.Parse()`, and
+`Version.Parse()` methods.
 
 ### External / HSM signing
 
@@ -297,7 +299,7 @@ signer needs only the version and the `PublicKey` of the external key.
 
 **Step 1 — compute the digest:**
 
-`ComputeDigest` embeds the CPK, encodes the payload, and returns both the payload bytes and the SHA-256 digest to sign
+`ComputeDigest()` embeds the CPK, encodes the payload, and returns both the payload bytes and the SHA-256 digest to sign
 externally:
 
 ```go
@@ -330,9 +332,9 @@ if err != nil {
 // token is the base64url PackedRTU, ready for the deposit service.
 ```
 
-Before assembling the final envelope, `ConstructSigned` verifies the signature against the CPK embedded in the payload.
-If the HSM signed with a different key, the call returns `ErrKeyInvalid` or `ErrSignatureInvalid`. `ConstructSigned`
-returns a `PackedRTU`; use `ConstructSignedRaw` for a `RawRTU` or `ConstructSignedObj` for an `*RTU`.
+Before assembling the final envelope, `ConstructSigned()` verifies the signature against the CPK embedded in the payload.
+If the HSM signed with a different key, the call returns `ErrKeyInvalid` or `ErrSignatureInvalid`. `ConstructSigned()`
+returns a `PackedRTU`; use `ConstructSignedRaw()` for a `RawRTU` or `ConstructSignedObj()` for an `*RTU`.
 
 Key Loading
 -----------
@@ -352,8 +354,8 @@ if err != nil {
 key, err := rtu.LoadPrivateKeyPEM(pem)
 ```
 
-To wrap an in-memory `*ecdsa.PrivateKey` (for example one returned by an HSM client), use `NewECPrivateKey`; for a
-public key only, use `NewECPublicKey`.
+To wrap an in-memory `*ecdsa.PrivateKey` (for example one returned by an HSM client), use `NewECPrivateKey()`; for a
+public key only, use `NewECPublicKey()`.
 
 ### Compressed public key
 
@@ -401,13 +403,13 @@ Size Limits
 | Max signed data (DER bytes) | 830   | Max DER size of the full `RTU` envelope        |
 
 The 750-byte payload limit is enforced during signing and the 830-byte envelope limit during envelope validation
-(`Unpack` / `RawRTU.Parse`). These limits keep the encoded credential within QR-code capacity. Exceeding either limit
+(`Unpack()` / `RawRTU.Parse()`). These limits keep the encoded credential within QR-code capacity. Exceeding either limit
 returns a `*ValidationError`.
 
 Errors
 ------
 
-The SDK returns sentinel error values that can be matched with `errors.Is`:
+The SDK returns sentinel error values that can be matched with `errors.Is()`:
 
 | Error                          | Returned when                                                                  |
 |--------------------------------|--------------------------------------------------------------------------------|
@@ -423,7 +425,7 @@ The SDK returns sentinel error values that can be matched with `errors.Is`:
 | `ErrEmptyInput`                | A required payload or signature argument is empty                              |
 
 Field-level validation failures are returned as `*ValidationError`, which carries the offending field name. Match it
-with `errors.As`:
+with `errors.As()`:
 
 ```go
 var verr *rtu.ValidationError
