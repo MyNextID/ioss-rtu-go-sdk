@@ -19,31 +19,31 @@ Table of Contents
 -----------------
 
 - [IOSS RTU Go SDK](#ioss-rtu-go-sdk)
-    - [Table of Contents](#table-of-contents)
-    - [Requirements](#requirements)
-    - [Installation](#installation)
-    - [Quickstart](#quickstart)
-    - [API Overview](#api-overview)
-    - [Data Types](#data-types)
-        - [Payload](#payload)
-        - [RTU](#rtu)
-        - [Key types](#key-types)
-    - [Signing Workflows](#signing-workflows)
-        - [Internal signing](#internal-signing)
-        - [Verification](#verification)
-        - [External / HSM signing](#external--hsm-signing)
-    - [Key Loading](#key-loading)
-        - [PEM — private key](#pem--private-key)
-        - [Compressed public key](#compressed-public-key)
-        - [Deriving the public key from a private key](#deriving-the-public-key-from-a-private-key)
-    - [Versions](#versions)
-        - [Version 1](#version-1)
-    - [Size Limits](#size-limits)
-    - [Errors](#errors)
-    - [ASN.1 Schema](#asn1-schema)
-    - [Building from Source](#building-from-source)
-    - [Testing](#testing)
-    - [License](#license)
+	- [Table of Contents](#table-of-contents)
+	- [Requirements](#requirements)
+	- [Installation](#installation)
+	- [Quickstart](#quickstart)
+	- [API Overview](#api-overview)
+	- [Data Types](#data-types)
+		- [Payload](#payload)
+		- [RTU](#rtu)
+		- [Key types](#key-types)
+	- [Signing Workflows](#signing-workflows)
+		- [Internal signing](#internal-signing)
+		- [Verification](#verification)
+		- [External / HSM signing](#external--hsm-signing)
+	- [Key Loading](#key-loading)
+		- [PEM — private key](#pem--private-key)
+		- [Compressed public key](#compressed-public-key)
+		- [Deriving the public key from a private key](#deriving-the-public-key-from-a-private-key)
+	- [Versions](#versions)
+		- [Version 1](#version-1)
+	- [Size Limits](#size-limits)
+	- [Errors](#errors)
+	- [ASN.1 Schema](#asn1-schema)
+	- [Building from Source](#building-from-source)
+	- [Testing](#testing)
+	- [License](#license)
 
 Requirements
 ------------
@@ -142,7 +142,7 @@ The **Receiver** column indicates where each entry is defined: `package` marks a
 
 | Function            | Receiver          | Parameters                                           | Returns                                | Purpose                                                                         |
 |---------------------|-------------------|------------------------------------------------------|----------------------------------------|---------------------------------------------------------------------------------|
-| `NewPayload`        | `package`         | `txID string, validUntil time.Time`                  | `*Payload`                             | Create a credential payload                                                     |
+| `NewPayload`        | `package`         | `transactionID string, validUntil time.Time`                  | `*Payload`                             | Create a credential payload                                                     |
 | `LoadPrivateKeyPEM` | `package`         | `pemBytes []byte`                                    | `*PrivateKey, error`                   | Load a P-256 private key from PEM (SEC1 or PKCS#8)                              |
 | `NewECPublicKey`    | `package`         | `pub *ecdsa.PublicKey`                               | `PublicKey, error`                     | Wrap a raw P-256 public key (for external signing)                              |
 | `Sign`              | `package`         | `version Version, payload *Payload, key *PrivateKey` | `PackedRTU, error`                     | Derive CPK, validate fields, sign, and return a ready-to-use `PackedRTU`        |
@@ -203,8 +203,7 @@ type RTU struct {
 }
 ```
 
-The envelope has two encoded forms. `RawRTU` is the ASN.1 DER encoding of `RTU`; `PackedRTU` is the base64url encoding
-of a `RawRTU`. The IOSS-RTU Deposit service requires the `PackedRTU` form over its API.
+The envelope has two encoded forms. `RawRTU` is the ASN.1 DER encoding of `RTU`; `PackedRTU` is the base64url encoding of a `RawRTU`. The IOSS-RTU Deposit service requires the `PackedRTU` form over its API.
 
 ### Key types
 
