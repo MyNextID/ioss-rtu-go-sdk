@@ -258,7 +258,7 @@ func (i ioss01Struct) Payload() (*Payload, error) {
 		payload.SetLimitConsignments(i.LimitConsignments)
 	}
 	if i.LimitDeliveryArea != "" {
-		payload.SetLimitDeliverArea(i.LimitDeliveryArea)
+		payload.SetLimitDeliveryArea(i.LimitDeliveryArea)
 	}
 	return payload, nil
 }
@@ -291,7 +291,7 @@ func buildV1RTU(values *Payload) (raw []byte, err error) {
 	} else {
 		return nil, &ValidationError{
 			Field:   ValidationFieldDelegatedUse,
-			Message: fmt.Sprintf("delegated use is not set"),
+			Message: "delegated use is not set",
 		}
 	}
 	if sellerName := values.SellerName(); sellerName != nil {
@@ -323,7 +323,7 @@ func buildV1RTU(values *Payload) (raw []byte, err error) {
 			return nil, err
 		}
 	}
-	if deliveryArea := values.LimitDeliverArea(); deliveryArea != nil {
+	if deliveryArea := values.LimitDeliveryArea(); deliveryArea != nil {
 		temp.LimitDeliveryArea = *deliveryArea
 		if err = temp.validateLimitDeliveryArea(); err != nil {
 			return nil, err

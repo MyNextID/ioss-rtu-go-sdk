@@ -18,7 +18,7 @@ type Payload struct {
 	delegatedUse      *bool
 	sellerName        *string
 	sellerAddr        *string
-	limitDeliverArea  *string
+	limitDeliveryArea *string
 	consignmentIDs    []string
 	limitConsignments *int
 }
@@ -79,12 +79,12 @@ func (p *Payload) SetSellerAddress(sellerAddr string) *Payload {
 	return p
 }
 
-func (p *Payload) LimitDeliverArea() *string {
-	return p.limitDeliverArea
+func (p *Payload) LimitDeliveryArea() *string {
+	return p.limitDeliveryArea
 }
 
-func (p *Payload) SetLimitDeliverArea(limitDeliverArea string) *Payload {
-	p.limitDeliverArea = &limitDeliverArea
+func (p *Payload) SetLimitDeliveryArea(limitDeliveryArea string) *Payload {
+	p.limitDeliveryArea = &limitDeliveryArea
 	return p
 }
 

@@ -20,9 +20,9 @@ func Sign(version Version, payload *Payload, key *PrivateKey) (PackedRTU, error)
 	return obj.Pack()
 }
 
-// SignV1 signs the given Payload object with ECDSA-P256 and creates a
+// signV1 signs the given Payload object with ECDSA-P256 and creates a
 // Version1 RTU object.
-func SignV1(payload *Payload, key *PrivateKey) (*RTU, error) {
+func signV1(payload *Payload, key *PrivateKey) (*RTU, error) {
 	if key.Algorithm() != AlgorithmEcdsaP256 {
 		return nil, fmt.Errorf("version 1 only support ecdsa-p256 private keys: %w", ErrKeyInvalid)
 	}

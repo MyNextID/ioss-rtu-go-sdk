@@ -14,11 +14,17 @@ func generateExampleV1RTU(payload *rtu.Payload, t *testing.T) *rtu.RTU {
 	if payload == nil {
 		payload = helpers.MinimalRTU()
 	}
-	obj, err := rtu.SignV1(payload, generatePrivateKey(t))
+	obj, err := rtu.Sign(rtu.Version1, payload, generatePrivateKey(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return obj
+
+	unpackedRtu, err := obj.Unpack()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return unpackedRtu
 }
 
 var supportedVersions = map[rtu.Version]func(payload *rtu.Payload, t *testing.T) *rtu.RTU{
@@ -231,7 +237,7 @@ func TestVersion1_Make_PayloadWithInvalidLimitDeliveryArea(t *testing.T) {
 	t.Parallel()
 
 	key := helpers.GenerateRTUPrivateKey(t)
-	payload := helpers.MinimalRTU().SetCPK(key.GetCPK()).SetLimitDeliverArea("INVALID_AREA")
+	payload := helpers.MinimalRTU().SetCPK(key.GetCPK()).SetLimitDeliveryArea("INVALID_AREA")
 
 	var expectedError *rtu.ValidationError
 
@@ -251,7 +257,7 @@ func TestVersion1_Make_PayloadWithValidLimitDeliveryArea(t *testing.T) {
 	t.Parallel()
 
 	key := helpers.GenerateRTUPrivateKey(t)
-	payload := helpers.MinimalRTU().SetCPK(key.GetCPK()).SetLimitDeliverArea("SI-00")
+	payload := helpers.MinimalRTU().SetCPK(key.GetCPK()).SetLimitDeliveryArea("SI-00")
 
 	_, err := rtu.Version1.Make(payload)
 	if err != nil {

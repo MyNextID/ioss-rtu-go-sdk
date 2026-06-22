@@ -19,31 +19,31 @@ Table of Contents
 -----------------
 
 - [IOSS RTU Go SDK](#ioss-rtu-go-sdk)
-	- [Table of Contents](#table-of-contents)
-	- [Requirements](#requirements)
-	- [Installation](#installation)
-	- [Quickstart](#quickstart)
-	- [API Overview](#api-overview)
-	- [Data Types](#data-types)
-		- [Payload](#payload)
-		- [RTU](#rtu)
-		- [Key types](#key-types)
-	- [Signing Workflows](#signing-workflows)
-		- [Internal signing](#internal-signing)
-		- [Verification](#verification)
-		- [External / HSM signing](#external--hsm-signing)
-	- [Key Loading](#key-loading)
-		- [PEM — private key](#pem--private-key)
-		- [Compressed public key](#compressed-public-key)
-		- [Deriving the public key from a private key](#deriving-the-public-key-from-a-private-key)
-	- [Versions](#versions)
-		- [Version 1](#version-1)
-	- [Size Limits](#size-limits)
-	- [Errors](#errors)
-	- [ASN.1 Schema](#asn1-schema)
-	- [Building from Source](#building-from-source)
-	- [Testing](#testing)
-	- [License](#license)
+    - [Table of Contents](#table-of-contents)
+    - [Requirements](#requirements)
+    - [Installation](#installation)
+    - [Quickstart](#quickstart)
+    - [API Overview](#api-overview)
+    - [Data Types](#data-types)
+        - [Payload](#payload)
+        - [RTU](#rtu)
+        - [Key types](#key-types)
+    - [Signing Workflows](#signing-workflows)
+        - [Internal signing](#internal-signing)
+        - [Verification](#verification)
+        - [External / HSM signing](#external--hsm-signing)
+    - [Key Loading](#key-loading)
+        - [PEM — private key](#pem--private-key)
+        - [Compressed public key](#compressed-public-key)
+        - [Deriving the public key from a private key](#deriving-the-public-key-from-a-private-key)
+    - [Versions](#versions)
+        - [Version 1](#version-1)
+    - [Size Limits](#size-limits)
+    - [Errors](#errors)
+    - [ASN.1 Schema](#asn1-schema)
+    - [Building from Source](#building-from-source)
+    - [Testing](#testing)
+    - [License](#license)
 
 Requirements
 ------------
@@ -75,7 +75,7 @@ At a high level, the signing workflow is:
 
 1. Load a P-256 private key into a `*rtu.PrivateKey` (see [Key Loading](#key-loading)).
 2. Build a `*rtu.Payload` with `rtu.NewPayload()` and the chainable `Set*()` methods.
-3. Call `rtu.SignV1()` to produce the signed `*rtu.RTU`, then `Pack()` it to a base64url token for QR encoding or transport.
+3. Call `rtu.Sign()` with the target version to produce and pack a `PackedRTU` base64url token for QR encoding or transport.
 
 `internal/examples/signer/main.go` is a self-contained starting point you can copy into your own project: it generates
 a key, signs a credential, and prints the base64url token ready for QR encoding. Companion examples for verification and
@@ -100,11 +100,11 @@ func main() {
 	// 1. Load a P-256 private key (SEC1 or PKCS#8 PEM).
 	pem, err := os.ReadFile("private-key.pem")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	key, err := rtu.LoadPrivateKeyPEM(pem)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	// 2. Populate the credential.
@@ -112,13 +112,9 @@ func main() {
 		SetDelegatedUse(false)
 
 	// 3. Sign and pack to a base64url token, ready for a QR code.
-	signed, err := rtu.SignV1(payload, key)
+	token, err := rtu.Sign(rtu.Version1, payload, key)
 	if err != nil {
-		panic(err)
-	}
-	token, err := signed.Pack()
-	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	fmt.Println(token) // base64url credential, ready for a QR code
@@ -137,31 +133,27 @@ Sentinel errors can be matched with `errors.Is()`, and field-level failures are 
 
 The typical call sequence follows one of the signing workflows described in [Signing Workflows](#signing-workflows).
 
-
 The table below is a quick reference to the SDK's exported API — the functions and methods you call directly. Every
 symbol is documented in full, with examples, on [pkg.go.dev](https://pkg.go.dev/github.com/MyNextID/ioss-rtu-go-sdk) or
-locally via `go doc`. 
+locally via `go doc`.
 The **Receiver** column indicates where each entry is defined: `package` marks a package-level function
-(called as `rtu.Function(...)`), while different type names such as `*RTU` or `PackedRTU` denote methods on insances of those types
+(called as `rtu.Function(...)`), while different type names such as `*RTU` or `PackedRTU` denote methods on instances of those types
 (called as `Receiver.Function()`). All receiver and parameter types are described in [Data Types](#data-types).
 
-<!-- NOTE: purpose for sign and signV1 are switched? is CPK derived in both cases or not? -->
-
-| Function           | Receiver          | Parameters                                           | Returns                                | Purpose                                                        |
-|--------------------|-------------------|------------------------------------------------------|----------------------------------------|----------------------------------------------------------------|
-| `NewPayload`       | `package`         | `txID string, validUntil time.Time`                  | `*Payload`                             | Create a credential payload                                    |
-| `LoadPrivateKeyPEM`| `package`         | `pemBytes []byte`                                    | `*PrivateKey, error`                   | Load a P-256 private key from PEM (SEC1 or PKCS#8)             |
-| `NewECPublicKey`   | `package`         | `pub *ecdsa.PublicKey`                               | `PublicKey, error`                     | Wrap a raw P-256 public key (for external signing)             |
-| `SignV1`           | `package`         | `payload *Payload, key *PrivateKey`                  | `*RTU, error`                          | Validate, derive CPK, sign                                     |
-| `Sign`             | `package`         | `version Version, payload *Payload, key *PrivateKey` | `PackedRTU, error`                     | Validate and sign for a given version                          |
-| `Parse`            | `*RTU`            | `withValidations bool`                               | `*Payload, error`                      | Verify signature, validate fields, return the payload          |
-| `Pack`             | `*RTU`            | —                                                    | `PackedRTU, error`                     | ASN.1 DER-encode then base64url-encode                         |
-| `Unpack`           | `PackedRTU`       | —                                                    | `*RTU, error`                          | Decode and validate the envelope                               |
-| `ComputeDigest`    | `*ExternalSigner` | `data *Payload`                                      | `digest []byte, payload []byte, error` | Encode payload and return its SHA-256 digest (for HSM signing) |
-| `ConstructSigned`  | `*ExternalSigner` | `payload []byte, signature []byte`                   | `PackedRTU, error`                     | Assemble a `PackedRTU` from payload and external signature     |
-| `GetCPK`           | `PrivateKey`      | —                                                    | `CPK`                                  | Derive the 33-byte compressed public key                       |
-| `GetPublicKey`     | `PrivateKey`      | —                                                    | `crypto.PublicKey`                     | Return the raw public key                                      |
-| `Parse`            | `CPK`             | `algorithm SignatureAlgorithm`                       | `PublicKey, error`                     | Recover a `PublicKey` from a compressed public key             |
+| Function            | Receiver          | Parameters                                           | Returns                                | Purpose                                                                         |
+|---------------------|-------------------|------------------------------------------------------|----------------------------------------|---------------------------------------------------------------------------------|
+| `NewPayload`        | `package`         | `txID string, validUntil time.Time`                  | `*Payload`                             | Create a credential payload                                                     |
+| `LoadPrivateKeyPEM` | `package`         | `pemBytes []byte`                                    | `*PrivateKey, error`                   | Load a P-256 private key from PEM (SEC1 or PKCS#8)                              |
+| `NewECPublicKey`    | `package`         | `pub *ecdsa.PublicKey`                               | `PublicKey, error`                     | Wrap a raw P-256 public key (for external signing)                              |
+| `Sign`              | `package`         | `version Version, payload *Payload, key *PrivateKey` | `PackedRTU, error`                     | Derive CPK, validate fields, sign, and return a ready-to-use `PackedRTU`        |
+| `Parse`             | `*RTU`            | `withValidations bool`                               | `*Payload, error`                      | Verify signature, validate fields, return the payload                           |
+| `Pack`              | `*RTU`            | —                                                    | `PackedRTU, error`                     | ASN.1 DER-encode then base64url-encode                                          |
+| `Unpack`            | `PackedRTU`       | —                                                    | `*RTU, error`                          | Decode and validate the envelope                                                |
+| `ComputeDigest`     | `*ExternalSigner` | `data *Payload`                                      | `digest []byte, payload []byte, error` | Encode payload and return its SHA-256 digest (for HSM signing)                  |
+| `ConstructSigned`   | `*ExternalSigner` | `payload []byte, signature []byte`                   | `PackedRTU, error`                     | Assemble a `PackedRTU` from payload and external signature                      |
+| `GetCPK`            | `PrivateKey`      | —                                                    | `CPK`                                  | Derive the 33-byte compressed public key                                        |
+| `GetPublicKey`      | `PrivateKey`      | —                                                    | `crypto.PublicKey`                     | Return the raw public key                                                       |
+| `Parse`             | `CPK`             | `algorithm SignatureAlgorithm`                       | `PublicKey, error`                     | Recover a `PublicKey` from a compressed public key                              |
 
 Data Types
 ----------
@@ -176,24 +168,22 @@ payload := rtu.NewPayload("TX-001", time.Now().Add(24*time.Hour)). // transactio
 	SetDelegatedUse(false).               // required
 	SetSellerName("Acme Corp").           // optional, max 100 bytes
 	SetSellerAddress("Brussels").         // optional, max 100 bytes
-	SetLimitDeliverArea("DE-BY").         // optional, pattern: [A-Z]{2}-[A-Z0-9]{1,4}
+	SetLimitDeliveryArea("DE-BY").         // optional, pattern: [A-Z]{2}-[A-Z0-9]{1,4}
 	SetConsignments([]string{"CNS001"}).  // optional, max 10 entries, each 1–35 bytes, no duplicates
 	SetLimitConsignments(50)              // optional, 1–100; mutually exclusive with consignments
 ```
 
-<!-- NOTE: required fields here are different than in ioss-rtu-issuer. Check for consistency across all versions! Also is it LimitDeliverArea or LimitDeliveryArea? Check all names-->
-
-| Field               | Type        | Required  | Constraints                                                                  |
-|---------------------|-------------|-----------|------------------------------------------------------------------------------|
-| `CPK`               | `CPK`       | internal  | Set automatically by the signer; value derived from the `SignatureAlgorithm` |
-| `DelegatedUse`      | `bool`      | yes       | No constraints                                                               |
-| `SellerName`        | `string`    | no        | Max 100 bytes                                                                |
-| `SellerAddress`     | `string`    | no        | Max 100 bytes                                                                |
-| `TransactionID`     | `string`    | yes       | 1–50 bytes                                                                   |
-| `ValidUntil`        | `time.Time` | yes       | Unix timestamp strictly in the future                                        |
-| `LimitDeliverArea`  | `string`    | no        | Must match `^[A-Z]{2}-[A-Z0-9]{1,4}$`                                        |
-| `ConsignmentIDs`    | `[]string`  | no (excl) | Max 10 entries; each 1–35 bytes; no duplicates                               |
-| `LimitConsignments` | `int`       | no (excl) | 1–100 when set                                                               |
+| Field               | Type           | Required  | Constraints                                                                  |
+|---------------------|----------------|-----------|------------------------------------------------------------------------------|
+| `CPK`               | `CPK`          | internal  | Set automatically by the signer; value derived from the `SignatureAlgorithm` |
+| `TransactionID`     | `string`       | yes       | 1–50 bytes                                                                   |
+| `ValidUntil`        | `time.Time`    | yes       | Unix timestamp strictly in the future                                        |
+| `DelegatedUse`      | `boolean`      | yes       | No constraints                                                               |
+| `SellerName`        | `string`       | no        | Max 100 bytes                                                                |
+| `SellerAddress`     | `string`       | no        | Max 100 bytes                                                                |
+| `LimitDeliveryArea` | `string`       | no        | Must match `^[A-Z]{2}-[A-Z0-9]{1,4}$`                                        |
+| `ConsignmentIDs`    | `string array` | no (excl) | Max 10 entries; each 1–35 bytes; no duplicates                               |
+| `LimitConsignments` | `integer`      | no (excl) | 1–100 when set                                                               |
 
 `ConsignmentIDs` and `LimitConsignments` are mutually exclusive — setting both returns a `*ValidationError` on
 `LimitConsignments`.
@@ -202,8 +192,7 @@ payload := rtu.NewPayload("TX-001", time.Now().Add(24*time.Hour)). // transactio
 
 The wire-format envelope wrapping a DER-encoded `Payload` together with its ECDSA-SHA256 signature and a version tag.
 It corresponds to the `SignedData` ASN.1 structure. Callers do not normally build the `RTU` by hand — it is produced by
-`SignV1()` / `Sign()` and `ExternalSigner`, and consumed via `Parse()`.
-<!-- NOTE: what do you mean by build by hand? How is the rtu payload populated by consignment data? If I have to populate the payload and then call sign, this counts as by hand... -->
+`Sign()` and `ExternalSigner`, and consumed via `Parse()`.
 
 ```go
 type RTU struct {
@@ -234,36 +223,31 @@ private key is available in-process, or **external signing** when the key is man
 
 ### Internal signing
 
-Use `SignV1()` when the private key is available in-process (or `Sign()` to select the version explicitly). The function:
+`Sign()` is the entry point for signing when the private key is available in-process. Pass the target version and it:
 
 1. Derives the compressed public key (CPK) from `key` and embeds it in the payload.
 2. Validates all fields in the `Payload` (see [Data Types](#data-types) for constraints).
 3. ASN.1 DER-encodes the `IOSSRTU` payload.
 4. Computes a SHA-256 digest of the encoded payload.
 5. Produces a DER-encoded ECDSA P-256 signature over the digest.
-6. Wraps payload and signature into an `RTU` envelope.
+6. Wraps payload and signature into a `PackedRTU` ready for QR code or API transport.
 
 ```go
 key, err := rtu.LoadPrivateKeyPEM(pemBytes)
 if err != nil {
-	panic(err)
+	log.Fatal(err)
 }
 
 payload := rtu.NewPayload("TX-2026-001", time.Now().Add(48*time.Hour)).
 	SetDelegatedUse(false)
 
-signed, err := rtu.SignV1(payload, key)
+token, err := rtu.Sign(rtu.Version1, payload, key)
 if err != nil {
-	panic(err)
-}
-
-// Pack the RTU to its base64url form for QR code or API transport:
-token, err := signed.Pack()
-if err != nil {
-	panic(err)
+	log.Fatal(err)
 }
 ```
-Do not set the CPK on the payload manually before calling `SignV1()` — the signer derives it from `key` and overwrites
+
+Do not set the CPK on the payload manually before calling `Sign()` — the signer derives it from `key` and overwrites
 any value you set.
 
 ### Verification
@@ -278,13 +262,13 @@ signed, err := packed.Unpack()
 if err != nil {
 	// envelope is not valid base64url, not valid DER, or fails envelope validation
 	// (unknown version, size out of range, unsupported algorithm)
-	panic(err)
+	log.Fatal(err)
 }
 
 payload, err := signed.Parse(true)
 if err != nil {
 	// signature verification failed, or a payload field is invalid
-	panic(err)
+	log.Fatal(err)
 }
 
 // payload is a *rtu.Payload — decoded, signature-verified, and fully validated.
@@ -316,7 +300,7 @@ payload := rtu.NewPayload("TX-HSM-001", time.Now().Add(48*time.Hour)).
 
 digest, rawPayload, err := signer.ComputeDigest(payload)
 if err != nil {
-	panic(err)
+	log.Fatal(err)
 }
 
 // digest      — 32-byte SHA-256 hash, send to the HSM
@@ -332,7 +316,7 @@ signature := myHSM.SignDigest(digest) // your HSM call
 
 token, err := signer.ConstructSigned(rawPayload, signature)
 if err != nil {
-	panic(err)
+	log.Fatal(err)
 }
 
 // token is the base64url PackedRTU, ready for the deposit service.
@@ -355,7 +339,7 @@ Accepts both SEC1 (`EC PRIVATE KEY`) and PKCS#8 (`PRIVATE KEY`) PEM blocks:
 ```go
 pem, err := os.ReadFile("private-key.pem")
 if err != nil {
-	panic(err)
+	log.Fatal(err)
 }
 key, err := rtu.LoadPrivateKeyPEM(pem)
 ```
@@ -436,7 +420,7 @@ with `errors.As()`:
 ```go
 var verr *rtu.ValidationError
 if errors.As(err, &verr) {
-	fmt.Printf("field %q: %s\n", verr.Field, verr.Message)
+fmt.Printf("field %q: %s\n", verr.Field, verr.Message)
 }
 ```
 
