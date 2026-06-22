@@ -27,22 +27,19 @@ func generateAValidPackedRTU() rtu.PackedRTU {
 	payload := rtu.NewPayload(txID, validUntil).
 		SetDelegatedUse(false).
 		SetSellerName("Acme Corp")
-	// Sign the payload and generate the signed *rtu.RTU object with Version 1
-	signedObj, err := rtu.SignV1(payload, privKey)
+
+	// Sign the payload and generate the packed *rtu.PackedRTU object with Version 1
+	packedRtu, err := rtu.Sign(rtu.Version1, payload, privKey)
 	if err != nil {
 		panic(err)
 	}
-	// pack the signedObj to get the final base64-url encoded IOSSRTU
-	packedRtu, err := signedObj.Pack()
-	if err != nil {
-		panic(err)
-	}
+
 	return packedRtu
 }
 
 func main() {
 	// get your IOSSRTU from a source, in this example we generate a valid one
-	var packedRtu rtu.PackedRTU = generateAValidPackedRTU()
+	var packedRtu = generateAValidPackedRTU()
 
 	signedObj, err := packedRtu.Unpack()
 	if err != nil {

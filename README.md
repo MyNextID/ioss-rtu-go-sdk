@@ -1,158 +1,376 @@
-# IOSS-RTU-GO-SDK
+IOSS RTU Go SDK
+===============
 
-> The SDK used to issue and verify/validate IOSS-RTU (Import One-Stop Shop Right To Use) tokens
+A Go library for signing, verifying, and encoding IOSS RTU (Import One-Stop Shop Right to Use) credentials. Produces
+ASN.1 DER-encoded `RTU` (`SignedData`) output suitable for base64url encoding and QR code transport.
 
-## Install
+**Key properties:**
 
-To install this library, you need to first `go get` the
-latest version:
-```shell
+- ECDSA P-256 signing and verification (Go standard library `crypto/ecdsa`)
+- ASN.1 DER encode/decode for the `IOSSRTU` payload and `SignedData` envelope — byte-compatible with the Java and C SDKs
+- External / HSM signing workflow via `ExternalSigner.ComputeDigest()` + `ExternalSigner.ConstructSigned()`
+- Key loading from PEM (SEC1 and PKCS#8)
+- Compressed P-256 public key encode/decode
+- QR code compatibility — encoded output enforced under size limits
+- Versioned schema design — forward-compatible with future RTU layouts and signature algorithms
+- Zero third-party dependencies — pure Go standard library
+
+Table of Contents
+-----------------
+
+- [IOSS RTU Go SDK](#ioss-rtu-go-sdk)
+	- [Table of Contents](#table-of-contents)
+	- [Requirements](#requirements)
+	- [Installation](#installation)
+	- [Quickstart](#quickstart)
+	- [API Overview](#api-overview)
+	- [Data Types](#data-types)
+		- [Payload](#payload)
+		- [RTU](#rtu)
+		- [Key types](#key-types)
+	- [Signing Workflows](#signing-workflows)
+		- [Internal signing](#internal-signing)
+		- [Verification](#verification)
+		- [External / HSM signing](#external--hsm-signing)
+	- [Key Loading](#key-loading)
+		- [PEM — private key](#pem--private-key)
+		- [Compressed public key](#compressed-public-key)
+		- [Deriving the public key from a private key](#deriving-the-public-key-from-a-private-key)
+	- [Versions](#versions)
+		- [Version 1](#version-1)
+	- [Size Limits](#size-limits)
+	- [Errors](#errors)
+	- [ASN.1 Schema](#asn1-schema)
+	- [Building from Source](#building-from-source)
+	- [Testing](#testing)
+	- [License](#license)
+
+Requirements
+------------
+
+- **Go 1.26 or later** — the SDK targets the toolchain declared in `go.mod` and relies on standard-library generics
+  and testing features available from that release.
+- **No third-party dependencies** — the SDK is built entirely on the Go standard library (`crypto/ecdsa`,
+  `crypto/elliptic`, `crypto/x509`, `encoding/asn1`, `encoding/base64`). Nothing else is pulled into your module graph.
+
+Installation
+------------
+
+Add the module to your project:
+
+```bash
 go get github.com/MyNextID/ioss-rtu-go-sdk@latest
 ```
 
-Next, include the library in you project:
+Then import it. The package is conventionally aliased to `rtu`:
+
 ```go
 import rtu "github.com/MyNextID/ioss-rtu-go-sdk"
 ```
 
-## Usage
+Quickstart
+----------
 
-This library has 3 main usages: `Sign`, `SignExternally` and `Parse` an IOSSRTU token.
+At a high level, the signing workflow is:
 
-All the examples can be found in the [examples](internal/examples) folder
+1. Load a P-256 private key into a `*rtu.PrivateKey` (see [Key Loading](#key-loading)).
+2. Build a `*rtu.Payload` with `rtu.NewPayload()` and the chainable `Set*()` methods.
+3. Call `rtu.Sign()` with the target version to produce and pack a `PackedRTU` base64url token for QR encoding or transport.
 
----
+`internal/examples/signer/main.go` is a self-contained starting point you can copy into your own project: it generates
+a key, signs a credential, and prints the base64url token ready for QR encoding. Companion examples for verification and
+the HSM workflow live alongside it in `internal/examples`. Run any of them straight from the source tree:
 
-## Data types
+```bash
+go run ./internal/examples/signer
+```
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+	"time"
+
+	rtu "github.com/MyNextID/ioss-rtu-go-sdk"
+)
+
+func main() {
+	// 1. Load a P-256 private key (SEC1 or PKCS#8 PEM).
+	pem, err := os.ReadFile("private-key.pem")
+	if err != nil {
+		log.Fatal(err)
+	}
+	key, err := rtu.LoadPrivateKeyPEM(pem)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// 2. Populate the credential.
+	payload := rtu.NewPayload("tx-001", time.Now().Add(24*time.Hour)).
+		SetDelegatedUse(false)
+
+	// 3. Sign and pack to a base64url token, ready for a QR code.
+	token, err := rtu.Sign(rtu.Version1, payload, key)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(token) // base64url credential, ready for a QR code
+}
+```
+
+For verification and the external/HSM signing workflow, see [Signing Workflows](#signing-workflows).
+
+API Overview
+------------
+
+The SDK returns errors as values rather than panicking — signing, verification, validation, and key loading all return
+an `error` that callers are expected to handle, because silent failures are unacceptable in customs and tax contexts.
+Sentinel errors can be matched with `errors.Is()`, and field-level failures are returned as `*rtu.ValidationError`; see section
+[Errors](#errors) for the full list.
+
+The typical call sequence follows one of the signing workflows described in [Signing Workflows](#signing-workflows).
+
+The table below is a quick reference to the SDK's exported API — the functions and methods you call directly. Every
+symbol is documented in full, with examples, on [pkg.go.dev](https://pkg.go.dev/github.com/MyNextID/ioss-rtu-go-sdk) or
+locally via `go doc`.
+The **Receiver** column indicates where each entry is defined: `package` marks a package-level function
+(called as `rtu.Function(...)`), while different type names such as `*RTU` or `PackedRTU` denote methods on instances of those types
+(called as `Receiver.Function()`). All receiver and parameter types are described in [Data Types](#data-types).
+
+| Function            | Receiver          | Parameters                                           | Returns                                | Purpose                                                                         |
+|---------------------|-------------------|------------------------------------------------------|----------------------------------------|---------------------------------------------------------------------------------|
+| `NewPayload`        | `package`         | `transactionID string, validUntil time.Time`                  | `*Payload`                             | Create a credential payload                                                     |
+| `LoadPrivateKeyPEM` | `package`         | `pemBytes []byte`                                    | `*PrivateKey, error`                   | Load a P-256 private key from PEM (SEC1 or PKCS#8)                              |
+| `NewECPublicKey`    | `package`         | `pub *ecdsa.PublicKey`                               | `PublicKey, error`                     | Wrap a raw P-256 public key (for external signing)                              |
+| `Sign`              | `package`         | `version Version, payload *Payload, key *PrivateKey` | `PackedRTU, error`                     | Derive CPK, validate fields, sign, and return a ready-to-use `PackedRTU`        |
+| `Parse`             | `*RTU`            | `withValidations bool`                               | `*Payload, error`                      | Verify signature, validate fields, return the payload                           |
+| `Pack`              | `*RTU`            | —                                                    | `PackedRTU, error`                     | ASN.1 DER-encode then base64url-encode                                          |
+| `Unpack`            | `PackedRTU`       | —                                                    | `*RTU, error`                          | Decode and validate the envelope                                                |
+| `ComputeDigest`     | `*ExternalSigner` | `data *Payload`                                      | `digest []byte, payload []byte, error` | Encode payload and return its SHA-256 digest (for HSM signing)                  |
+| `ConstructSigned`   | `*ExternalSigner` | `payload []byte, signature []byte`                   | `PackedRTU, error`                     | Assemble a `PackedRTU` from payload and external signature                      |
+| `GetCPK`            | `PrivateKey`      | —                                                    | `CPK`                                  | Derive the 33-byte compressed public key                                        |
+| `GetPublicKey`      | `PrivateKey`      | —                                                    | `crypto.PublicKey`                     | Return the raw public key                                                       |
+| `Parse`             | `CPK`             | `algorithm SignatureAlgorithm`                       | `PublicKey, error`                     | Recover a `PublicKey` from a compressed public key                              |
+
+Data Types
+----------
+
+### Payload
+
+The credential payload. Build instances with `NewPayload()` and the chainable `Set*()` methods; the `cpk` field is set
+automatically by the signer — do not set it manually. Instances must pass validation before they can be signed.
+
+```go
+payload := rtu.NewPayload("TX-001", time.Now().Add(24*time.Hour)). // transactionID (1–50 bytes), validUntil (future)
+	SetDelegatedUse(false).               // required
+	SetSellerName("Acme Corp").           // optional, max 100 bytes
+	SetSellerAddress("Brussels").         // optional, max 100 bytes
+	SetLimitDeliveryArea("DE-BY").         // optional, pattern: [A-Z]{2}-[A-Z0-9]{1,4}
+	SetConsignments([]string{"CNS001"}).  // optional, max 10 entries, each 1–35 bytes, no duplicates
+	SetLimitConsignments(50)              // optional, 1–100; mutually exclusive with consignments
+```
+
+| Field               | Type           | Required  | Constraints                                                                  |
+|---------------------|----------------|-----------|------------------------------------------------------------------------------|
+| `CPK`               | `CPK`          | internal  | Set automatically by the signer; value derived from the `SignatureAlgorithm` |
+| `TransactionID`     | `string`       | yes       | 1–50 bytes                                                                   |
+| `ValidUntil`        | `time.Time`    | yes       | Unix timestamp strictly in the future                                        |
+| `DelegatedUse`      | `boolean`      | yes       | No constraints                                                               |
+| `SellerName`        | `string`       | no        | Max 100 bytes                                                                |
+| `SellerAddress`     | `string`       | no        | Max 100 bytes                                                                |
+| `LimitDeliveryArea` | `string`       | no        | Must match `^[A-Z]{2}-[A-Z0-9]{1,4}$`                                        |
+| `ConsignmentIDs`    | `string array` | no (excl) | Max 10 entries; each 1–35 bytes; no duplicates                               |
+| `LimitConsignments` | `integer`      | no (excl) | 1–100 when set                                                               |
+
+`ConsignmentIDs` and `LimitConsignments` are mutually exclusive — setting both returns a `*ValidationError` on
+`LimitConsignments`.
 
 ### RTU
 
-RTU object defines the IOSS-RTU token that is issued and/or verified
+The wire-format envelope wrapping a DER-encoded `Payload` together with its ECDSA-SHA256 signature and a version tag.
+It corresponds to the `SignedData` ASN.1 structure. Callers do not normally build the `RTU` by hand — it is produced by
+`Sign()` and `ExternalSigner`, and consumed via `Parse()`.
 
 ```go
 type RTU struct {
-    // Version is the type of this signed rtu (schema id). It determines what type of payload we should expect
-    Version Version `json:"version" asn1:""`
-    // Payload is the raw byte array of the RTU payload
-    Payload []byte `json:"payload" asn1:""`
-    // Signature is the raw byte array of the signature
-    Signature []byte `json:"signature" asn1:""`
-    // Algorithm is the signature algorithm for the Signature of the given Payload in this Signed structure
-    Algorithm SignatureAlgorithm `json:"algorithm" asn1:",utf8,optional"`
+	Version   Version            // schema id; determines how Payload is parsed
+	Payload   []byte             // DER-encoded IOSSRTU payload (the bytes that were signed)
+	Signature []byte             // raw signature bytes
+	Algorithm SignatureAlgorithm // optional; empty means the version's default algorithm
 }
 ```
 
-The library also defines an `RawRTU` and `PackedRTU`. 
-Both are encoded versions of the above RTU structure.
+The envelope has two encoded forms. `RawRTU` is the ASN.1 DER encoding of `RTU`; `PackedRTU` is the base64url encoding of a `RawRTU`. The IOSS-RTU Deposit service requires the `PackedRTU` form over its API.
 
-`RawRTU` is ASN.1 DER encoded RTU, while `PackedRTU` is base64url encoded RawRTU. 
+### Key types
 
-NOTE: IOSS-RTU Deposit service requires `PackedRTU` to be sent via API
+P-256 keys are wrapped in `PrivateKey` and `PublicKey`, which bind a raw `crypto` key to its `SignatureAlgorithm` and a
+precomputed CPK. Keys on any curve other than P-256 (secp256r1) are rejected with `ErrKeyInvalid`.
 
-#### Schema
-ASN.1 DER schema of the RTU object:
-```asn
--- Top-level signed envelope.  DER-encode this structure for QR / API transport.
-SignedData ::= SEQUENCE {
-    version     INTEGER,
+The compressed public key (CPK) embedded in the payload is 33 bytes: a one-byte prefix (`0x02` for even Y, `0x03` for
+odd Y) followed by the 32-byte X coordinate. Use `PublicKey.GetCPK()` to obtain the compressed form and `CPK.Parse()` to
+recover a `PublicKey` from it.
 
-    -- DER-encoded IOSSRTU payload (the bytes that were hashed and signed).
-    payload     OCTET STRING,
+Signing Workflows
+-----------------
 
-    -- DER-encoded signature bytes: (depends on algorithm and version)
-    signature   OCTET STRING
-    
-    -- Algorithm is the signature algorithm for the signature and/or CPK inside of the payload.
-    algorithm   UTF8String OPTIONAL
+The following examples show how to use the SDK to produce and consume credentials. Use **internal signing** when the
+private key is available in-process, or **external signing** when the key is managed by an HSM or signing service.
+
+### Internal signing
+
+`Sign()` is the entry point for signing when the private key is available in-process. Pass the target version and it:
+
+1. Derives the compressed public key (CPK) from `key` and embeds it in the payload.
+2. Validates all fields in the `Payload` (see [Data Types](#data-types) for constraints).
+3. ASN.1 DER-encodes the `IOSSRTU` payload.
+4. Computes a SHA-256 digest of the encoded payload.
+5. Produces a DER-encoded ECDSA P-256 signature over the digest.
+6. Wraps payload and signature into a `PackedRTU` ready for QR code or API transport.
+
+```go
+key, err := rtu.LoadPrivateKeyPEM(pemBytes)
+if err != nil {
+	log.Fatal(err)
 }
-```
----
-### Payload
 
-```go
-// Payload is the structureless data container for all versions of RTU
-type Payload struct {
-	// unexported fields
-}
-```
+payload := rtu.NewPayload("TX-2026-001", time.Now().Add(48*time.Hour)).
+	SetDelegatedUse(false)
 
-`Payload` is a structure used to store all relevant data inside an `RTU.Payload`.
-
-It allows setting and getting of all stored information of an `IOSS-RTU`
-
-Each `Version` supported in this library should be able to parse its own data structure into `rtu.SchemaPayload`, which is
-an interface that allows conversion to `rtu.Payload`. See the CONTRIBUTION section for more details on `SchemaPayload` and
-how to add a new version
-
----
-
-### SignatureAlgorithms
-
-This SDK has a `PublicKey` and `PrivateKey` structure to help join correct CPK and keys to its rightful `SignatureAlgorithm`
-
-List of available SignatureAlgorithms:
-```go
-const (
-	AlgorithmNone      SignatureAlgorithm = ""
-	AlgorithmEcdsaP256 SignatureAlgorithm = "ecdsa-p256"
-)
-```
-
-SignatureAlgorithms define a signature algorithm type. It also implements `Digest` method, which returns a digest of a payload
-based on the signature type. Example: `rtu.AlgorithmEcdsaP256` returns a SHA256 digest, to be signed with an ECDSA private key.
-
----
-
-### CPK
-
-CPK - Compressed Public Key is a raw byte array compressed representation of a public key.
-
-```go
-type CPK []byte
-```
-
-It has a method `Parse`, that allows recovery of a publicKey, with a given `SignatureAlgorithm` and returns a `rtu.PublicKey`
-
-
-Example: For the signature algorithm `rtu.AlgorithmEcdsaP256`, the CPK value is:
-```go
-var key *ecdsa.PublicKey // key is on P-256 curve
-
-var cpk CPK = elliptic.MarshalCompressed(key.Curve, key.X, key.Y)
-```
----
-
-### Keys
-
-`PublicKey` is the combination of a SignatureAlgorithm with a publicKey `crypto.PublicKey` and a computedCPK `rtu.CPK`.
-
-```go
-type PublicKey struct {
-	pubKey crypto.PublicKey   
-	alg    SignatureAlgorithm
-
-	computedCPK CPK
+token, err := rtu.Sign(rtu.Version1, payload, key)
+if err != nil {
+	log.Fatal(err)
 }
 ```
 
-`PrivateKey` is the same as `PublicKey` but also adds the correct privateKey into the combination.
+Do not set the CPK on the payload manually before calling `Sign()` — the signer derives it from `key` and overwrites
+any value you set.
+
+### Verification
+
+Use `PackedRTU.Unpack()` to decode and validate the envelope, then `RTU.Parse(true)` to verify the signature and validate
+the credential payload:
 
 ```go
-type PrivateKey struct {
-	privKey any
+var packed rtu.PackedRTU = "...base64url_encoded_rtu..."
 
-	PublicKey
+signed, err := packed.Unpack()
+if err != nil {
+	// envelope is not valid base64url, not valid DER, or fails envelope validation
+	// (unknown version, size out of range, unsupported algorithm)
+	log.Fatal(err)
 }
+
+payload, err := signed.Parse(true)
+if err != nil {
+	// signature verification failed, or a payload field is invalid
+	log.Fatal(err)
+}
+
+// payload is a *rtu.Payload — decoded, signature-verified, and fully validated.
 ```
 
----
-## Versions
+`Parse(true)` performs the following checks in order: parse the `IOSSRTU` payload, validate all fields, recover the
+public key from the embedded CPK, and verify the ECDSA signature over the payload. Any failure returns a typed error
+(`ErrDecoding`, `ErrSignatureInvalid`, or a `*ValidationError`).
 
-For future improvements to the RTU structure and/or adding signature support, each `rtu.RTU` signed object has a `Version` property,
-which defines the signature type, signature algorithms supported, maxRTUSize, maxRTUPayload size and payload structure along with 
-all the validation rules for the fields inside the correct payload structure.
+If the source is trusted, validation can be skipped for performance by parsing with `withValidations` set to `false`.
+This is not recommended unless you control the source — see the lower-level `PackedRTU.Raw()`, `RawRTU.Parse()`, and
+`Version.Parse()` methods.
 
-Currently this library support IOSS-RTU Versions:
+### External / HSM signing
+
+Use `ExternalSigner` when the private key is held in a hardware security module (HSM) or a remote signing service. The
+signer needs only the version and the `PublicKey` of the external key.
+
+**Step 1 — compute the digest:**
+
+`ComputeDigest()` embeds the CPK, encodes the payload, and returns both the payload bytes and the SHA-256 digest to sign
+externally:
+
+```go
+signer := rtu.NewExternalSigner(rtu.Version1, publicKey)
+
+payload := rtu.NewPayload("TX-HSM-001", time.Now().Add(48*time.Hour)).
+	SetDelegatedUse(false)
+
+digest, rawPayload, err := signer.ComputeDigest(payload)
+if err != nil {
+	log.Fatal(err)
+}
+
+// digest      — 32-byte SHA-256 hash, send to the HSM
+// rawPayload  — DER-encoded IOSSRTU, retain until step 2
+```
+
+**Step 2 — assemble the signed credential:**
+
+Once the HSM returns a DER-encoded ECDSA signature over the digest, submit it together with the retained payload:
+
+```go
+signature := myHSM.SignDigest(digest) // your HSM call
+
+token, err := signer.ConstructSigned(rawPayload, signature)
+if err != nil {
+	log.Fatal(err)
+}
+
+// token is the base64url PackedRTU, ready for the deposit service.
+```
+
+Before assembling the final envelope, `ConstructSigned()` verifies the signature against the CPK embedded in the payload.
+If the HSM signed with a different key, the call returns `ErrKeyInvalid` or `ErrSignatureInvalid`. `ConstructSigned()`
+returns a `PackedRTU`; use `ConstructSignedRaw()` for a `RawRTU` or `ConstructSignedObj()` for an `*RTU`.
+
+Key Loading
+-----------
+
+The SDK loads P-256 keys from standard formats. Key-loading and key-construction helpers return `ErrKeyInvalid` on
+failure.
+
+### PEM — private key
+
+Accepts both SEC1 (`EC PRIVATE KEY`) and PKCS#8 (`PRIVATE KEY`) PEM blocks:
+
+```go
+pem, err := os.ReadFile("private-key.pem")
+if err != nil {
+	log.Fatal(err)
+}
+key, err := rtu.LoadPrivateKeyPEM(pem)
+```
+
+To wrap an in-memory `*ecdsa.PrivateKey` (for example one returned by an HSM client), use `NewECPrivateKey()`; for a
+public key only, use `NewECPublicKey()`.
+
+### Compressed public key
+
+Convert between a `PublicKey` and the 33-byte compressed SEC1 form:
+
+```go
+cpk := publicKey.GetCPK()             // PublicKey → 33-byte CPK
+recovered, err := cpk.Parse(rtu.AlgorithmEcdsaP256) // CPK → PublicKey
+```
+
+### Deriving the public key from a private key
+
+A `PrivateKey` embeds its `PublicKey`, so the public material is always available without recomputation:
+
+```go
+pub := key.GetPublicKey() // crypto.PublicKey
+cpk := key.GetCPK()       // 33-byte compressed form
+```
+
+Versions
+--------
+
+Every signed `RTU` carries a `Version`, an integer schema id that determines the payload layout, the supported
+signature algorithms, the size limits, and the field validation rules. This keeps the wire format forward-compatible:
+new schemas can be added without breaking existing verifiers.
+
 ```go
 const (
 	Version1 Version = 1
@@ -161,229 +379,142 @@ const (
 
 ### Version 1
 
-The first version of an IOSS-RTU. 
-It only supports `AlgorithmEcdsaP256` SignatureAlgorithm and enforces the `Algorithm` property inside `RTU` to be empty.
+The first version of an IOSS-RTU. It supports only the `AlgorithmEcdsaP256` signature algorithm and requires the
+`Algorithm` field inside `RTU` to be empty (the version default is implied). The payload layout and field constraints
+are described in [Data Types](#data-types) and [ASN.1 Schema](#asn1-schema).
 
-#### Payload schema
+Size Limits
+-----------
 
-ASN.1 Schema of the payload in `Version1`:
+| Limit                       | Value | Description                                    |
+|-----------------------------|-------|------------------------------------------------|
+| Max payload (DER bytes)     | 750   | Max DER size of the `IOSSRTU` payload          |
+| Max signed data (DER bytes) | 830   | Max DER size of the full `RTU` envelope        |
+
+The 750-byte payload limit is enforced during signing and the 830-byte envelope limit during envelope validation
+(`Unpack()` / `RawRTU.Parse()`). These limits keep the encoded credential within QR-code capacity. Exceeding either limit
+returns a `*ValidationError`.
+
+Errors
+------
+
+The SDK returns sentinel error values that can be matched with `errors.Is()`:
+
+| Error                          | Returned when                                                                  |
+|--------------------------------|--------------------------------------------------------------------------------|
+| `ErrValidation`                | A field fails its constraint (wrapped by `*ValidationError`)                   |
+| `ErrEncoding` / `ErrDecoding`  | ASN.1 DER encoding or decoding fails                                           |
+| `ErrSignatureInvalid`          | Signature verification fails                                                   |
+| `ErrSigning`                   | ECDSA signing fails                                                            |
+| `ErrSignatureAlgorithmInvalid` | The signature algorithm is unknown or unsupported                             |
+| `ErrNoSignatureAlgorithm`      | A signing operation is attempted with no algorithm set                         |
+| `ErrCPKUnsupported`            | The compressed public key type is not supported                                |
+| `ErrKeyInvalid`                | A key cannot be parsed, is not EC, is not on P-256, or does not match the CPK   |
+| `ErrUnknownVersion`            | The `RTU` version is not recognised                                            |
+| `ErrEmptyInput`                | A required payload or signature argument is empty                              |
+
+Field-level validation failures are returned as `*ValidationError`, which carries the offending field name. Match it
+with `errors.As()`:
+
+```go
+var verr *rtu.ValidationError
+if errors.As(err, &verr) {
+fmt.Printf("field %q: %s\n", verr.Field, verr.Message)
+}
+```
+
+`*ValidationError` unwraps to `ErrValidation`, so `errors.Is(err, rtu.ErrValidation)` also matches any field error.
+
+ASN.1 Schema
+------------
+
+Credentials are encoded as ASN.1 DER, a compact and unambiguous binary format that is well-suited to QR-code transport
+and interoperable across implementations in any programming language. The wire format is DER-encoded according to the
+following ASN.1 module:
+
 ```asn1
-IOSSRTUVersion1 DEFINITIONS IMPLICIT TAGS ::= BEGIN
+IOSSRTUModule DEFINITIONS IMPLICIT TAGS ::= BEGIN
 
--- A 33-byte compressed P-256 public key point.
--- Prefix byte is 0x02 (even Y) or 0x03 (odd Y), followed by the 32-byte X coordinate.
 CompressedPublicKey ::= OCTET STRING (SIZE(33))
+ConsignmentID       ::= UTF8String (SIZE(1..35))
+ConsignmentIDList   ::= SEQUENCE (SIZE(1..10)) OF ConsignmentID
 
--- A single consignment identifier.
-ConsignmentID ::= UTF8String (SIZE(1..35))
-
--- An ordered list of consignment identifiers. Max 10 entries; all entries must be unique.
-ConsignmentIDList ::= SEQUENCE (SIZE(1..10)) OF ConsignmentID
-
--- Credential payload. The DER encoding of this structure is what gets hashed and signed.
 IOSSRTU ::= SEQUENCE {
-    -- 33-byte compressed ECDSA P-256 public key embedded by the SDK (see CPK section below).
     cpk                 CompressedPublicKey,
-
     delegatedUse        BOOLEAN,
-
-    -- [0] and [1] context tags are required — both fields share the UTF8String universal
-    -- tag with transactionID; without tags the decoder cannot tell them apart when absent.
-    sellerName          [0] UTF8String OPTIONAL,   -- max 100 characters
-    sellerAddress       [1] UTF8String OPTIONAL,   -- max 100 characters
-
-    -- 1–50 characters
+    sellerName          [0] UTF8String OPTIONAL,
+    sellerAddress       [1] UTF8String OPTIONAL,
     transactionID       UTF8String,
-
-    -- Unix epoch timestamp; must be strictly in the future at sign and verify time.
     validUntil          INTEGER,
-
-    -- When present, must match ^[A-Z]{2}-[A-Z0-9]{1,4}$
     limitDeliveryArea   UTF8String OPTIONAL,
-
     consignmentIDs      ConsignmentIDList OPTIONAL,
-
-    -- When present, must be in range 1..100
     limitConsignments   INTEGER OPTIONAL
 }
+
+SignedData ::= SEQUENCE {
+    version     INTEGER,
+    payload     OCTET STRING,
+    signature   OCTET STRING,
+    algorithm   UTF8String OPTIONAL
+}
+
 END
 ```
 
-#### Definitions
+`sellerName` and `sellerAddress` use context-specific tags (`[0]` and `[1]`) because they are optional `UTF8String`
+fields that precede another `UTF8String` field (`transactionID`). Without explicit tags, a decoder could not reliably
+determine which field is present when one or both optional fields are omitted. The trailing optional fields each have
+distinct ASN.1 types (`UTF8String`, `SEQUENCE`, and `INTEGER`) and are therefore unambiguous without additional
+context-specific tags.
 
-Payload definitions and validations used in `Version1`
+Building from Source
+--------------------
 
-| Field               | Type       | Required  | Constraints                                                                                               |
-|---------------------|------------|-----------|-----------------------------------------------------------------------------------------------------------|
-| `CPK`               | `[]byte`   | internal  | Set automatically by `Signer` and `*ExternalSigner.ComputeDigest`; value is based on `SignatureAlgorithm` |
-| `DelegatedUse`      | `bool`     | yes       | No constraints                                                                                            |
-| `SellerName`        | `string`   | no        | Max 100 characters                                                                                        |
-| `SellerAddress`     | `string`   | no        | Max 100 characters                                                                                        |
-| `TransactionID`     | `string`   | yes       | 1–50 characters                                                                                           |
-| `ValidUntil`        | `int64`    | yes       | Unix timestamp strictly in the future                                                                     |
-| `LimitDeliveryArea` | `string`   | no        | Must match `^[A-Z]{2}-[A-Z0-9]{1,4}$`                                                                     |
-| `ConsignmentIDs`    | `[]string` | no (excl) | Max 10 items; each 1–35 characters; no duplicates                                                         |
-| `LimitConsignments` | `int`      | no (excl) | 1–100 when set                                                                                            |
+The project builds with the standard Go toolchain — no code generation or external build tools are involved.
 
-NOTE: `ConsignmentIDs` and `LimitConsignments` are exclusive. If both are set, a ValidationError is returned on `LimitConsignments`
-
-#### SignedObject Limits
-
-`rtu.RTU` object limits and finalSize limit used by `Version1`
-
-| Constant                            | Value | Description                                             |
-|-------------------------------------|-------|---------------------------------------------------------|
-| `version1MaxEncodedRTUBytes`        | `750` | Max DER size of `RTU.Payload` for QR code compatibility |
-| `version1MaxEncodedSignedDataBytes` | `830` | Max DER size of the full `RawRTU` envelope              |
-
----
-
-## Signers
-
-### SignV1
-
-`SignV1` is a `rtu.Signer` function, that signs a `rtu.Payload` with an ECDSA-P256 private key (version 1 only supports that algorithm),
-and creates a `rtu.Version1` RTU
-```go
-
-key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-if err != nil {
-	panic(err)
-}
-
-privateKey, err := rtu.NewECPrivateKey(key)
-if err != nil {
-	panic(err)
-}
-
-payload := rtu.NewPayload("TX_ID", time.Now().Add(time.Hour)).SetDelegatedUse(false)
-
-// Sign the payload as an Version1 RTU object, with the given privateKey
-signedRtu, err := rtu.SignV1(payload, privateKey)
+```bash
+git clone https://github.com/MyNextID/ioss-rtu-go-sdk.git
+cd ioss-rtu-go-sdk
+go build ./...
 ```
 
-### Sign
-
-`Sign` is a helper function, that takes a `rtu.Version`, `rtu.Payload` and `rtu.PrivateKey` variable, and generates a `rtu.PackedRTU`
-
-```go
-key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-if err != nil {
-	panic(err)
-}
-
-privateKey, err := rtu.NewECPrivateKey(key)
-if err != nil {
-	panic(err)
-}
-
-payload := rtu.NewPayload("TX_ID", time.Now().Add(time.Hour)).SetDelegatedUse(false)
-
-// Sign the payload as an Version1 RTU object, with the given privateKey
-packedRtu, err := rtu.Sign(rtu.Version1, paylaod, privateKey)
-
+```bash
+go build ./...               # compile the library and examples
+go vet ./...                 # static analysis
+go test ./...                # run the test suite
+go run ./internal/examples/signer   # run an example
 ```
 
-### External Signer
+Testing
+-------
 
-`ExternalSigner` is a service, that enables issuers to sign via an external private key. It needs the `rtu.PublicKey` representation
-of the external signer's public key, and the version of the RTU object it is producing. 
+Run the full test suite from the repository root:
 
-You can then use its methods `ComputeDigest` to generate the correct digest to sign and the raw payload, that was constructed from `rtu.Payload`.
-Signing the digest with the correct private key, and offering the signature along with the given raw payload into `ConstructSigned` allows the signer
-to validate your signature (and validate it was signed with the correct private key) and construct the correct RTU object.
-
-`ConstructSigned` returns a PackedRTU for easier usage, to get a `RawRTU` use `ConstructSignedRaw`,
-or if you wish to get an `rtu.RTU` object, use `ConstructSignedObj`.
-
-```go
-var publicKey rtu.PublicKey // get public key for your signer, import *ecdsa.PublicKey with rtu.NewECPublicKey(publicKey)
-
-externalSigner := rtu.NewExternalSigner(rtu.Version1, publicKey)
-
-var payload *rtu.Payload // create your Payload for the RTU token
-
-digest, rawPayload, err := externalSigner.ComputeDigest(payload)
-if err != nil {
-	panic(err)
-}
-
-var signature []byte // get signature from external signer using digest as the payload to sign
-
-signedRtu, err := externalSigner.ConstructSigned(rawPayload, signature)
-if err != nil {
-	panic(err)
-}
-
-// signedRtu is the rtu.PackedRTU, that can be used to send to rtu deposit service
+```bash
+go test ./... -race
 ```
----
-
-## Verify
-
-The below code is a simple example of how verification and validation of an `PackedRTU` can be achieved using this SDK
-```go
-var packedRtu rtu.PackedRTU = "...base64url_encoded_rtu..."
-
-signedObj, err := packedRtu.Unpack()
-if err != nil {
-	// error here means the rtu encoding was bad, or validation of the signedObject went wrong (rtuSize and payloadSize are version specific)
-	panic(err)
-}
-
-payload, err := signedObj.Parse(true)
-if err != nil {
-	// error here means the payload was malformed, signature was bad or the payload structure fields were invalid
-	// (validUntil field is no longer valid, transactionId field is empty or is too large, CPK malformed etc.)
-    // validation errors return an *rtu.ValidationError error, which has the exact fields that was bad
-	panic(err)
-}
-
-// payload is a rtu.Payload object, and has been validated and verified
-```
-
-NOTE: Certain validations and verifications can be skipped, by parsing with extra steps, and always putting `withValidations: false`.
-This is usually not recommended, but in case where the source is trusted, it can improve performance.
-
-```go
-// No verification/validation parsing of RTU (don't use it unless you know what you are doing!)
-
-var packedRtu rtu.PackedRTU = "...base64url_encoded_rtu..."
-
-rawRtu, err := packedRtu.Raw()
-if err != nil {
-	// only base64url decoding error possible here
-	panic(err)
-}
-
-signedObj, err := rawRtu.Parse(false)
-if err != nil {
-	// only asn.1 decoding error possible here (no signedObject validations)
-	panic(err)
-}
-
-payload, err := signedObj.Parse(false)
-if err != nil {
-	// only asn.1 decoding error here (no validation)
-	panic(err)
-}
-```
-
----
-
-## Testing
-Run the full test suite from the repo root:
-
-> go test ./... -race
 
 Run with benchmarks:
 
-> go test ./... -bench=. -benchmem
+```bash
+go test ./... -bench=. -benchmem
+```
 
-The SDK test suite contains 52 test functions covering unit tests, integration round-trips, benchmark cases, and error handling paths. All tests are parallel-safe.
+The test suite covers:
 
----
+- ASN.1 encoding and decoding round-trips
+- Field validation
+- Signing and verification
+- External / HSM signing workflows
+- Key loading from PEM (SEC1 and PKCS#8)
+- Compressed key operations
+- Tamper detection
+- Invalid and empty-input handling
 
-## Licence
+All tests are parallel-safe. Go's `crypto/ecdsa` adds randomness to each signature (hedged nonces), so signatures differ
+for the same input across invocations. All signatures cross-verify correctly with the Java and C SDKs.
 
-See [LICENCE](LICENCE).
+License
+-------
+
+European Union Public Licence v. 1.2 — see [LICENCE](LICENCE) for terms.

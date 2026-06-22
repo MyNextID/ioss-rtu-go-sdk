@@ -31,7 +31,7 @@ func (v Version) Validate(rtu *RTU, sizeOfRaw int) error {
 func (v Version) Signer() (Signer, error) {
 	switch v {
 	case Version1:
-		return SignV1, nil
+		return signV1, nil
 	default:
 		return nil, ErrUnknownVersion
 	}

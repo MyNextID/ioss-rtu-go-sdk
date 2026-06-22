@@ -94,7 +94,7 @@ func FullRTU() *rtu.Payload {
 		SetDelegatedUse(true).
 		SetSellerName("Acme Corp").
 		SetSellerAddress("1 Commerce Way").
-		SetLimitDeliverArea("DE-BY").
+		SetLimitDeliveryArea("DE-BY").
 		SetConsignments([]string{"CNS001", "CNS002", "CNS003"})
 }
 
@@ -105,7 +105,7 @@ func MaxRTU() *rtu.Payload {
 		SetDelegatedUse(true).
 		SetSellerName(strings.Repeat("A", maxSellerNameLen)).
 		SetSellerAddress(strings.Repeat("B", maxSellerAddressLen)).
-		SetLimitDeliverArea("US-ABCD").
+		SetLimitDeliveryArea("US-ABCD").
 		SetConsignments([]string{
 			strings.Repeat("1", maxConsignmentIDLen), strings.Repeat("2", maxConsignmentIDLen),
 			strings.Repeat("3", maxConsignmentIDLen), strings.Repeat("4", maxConsignmentIDLen),
@@ -118,10 +118,16 @@ func MaxRTU() *rtu.Payload {
 func SignedRTUV1(tb testing.TB) *rtu.RTU {
 	tb.Helper()
 
-	out, err := rtu.SignV1(MinimalRTU(), GenerateRTUPrivateKey(tb))
+	packed, err := rtu.Sign(rtu.Version1, MinimalRTU(), GenerateRTUPrivateKey(tb))
 	if err != nil {
 		tb.Fatalf("failed to sign RTU: %v", err)
 	}
+
+	out, err := packed.Unpack()
+	if err != nil {
+		tb.Fatalf("failed to unpack packed rtu: %v", err)
+	}
+
 	return out
 }
 
@@ -195,8 +201,8 @@ func AssertPayloadEqual(t *testing.T, want, got *rtu.Payload) {
 		t.Errorf("ValidUntil: got %v, want %v", got.ValidUntil(), want.ValidUntil())
 	}
 
-	AssertPointerValuesOptionalFieldEqual(t, "LimitDeliverArea",
-		want.LimitDeliverArea(), got.LimitDeliverArea())
+	AssertPointerValuesOptionalFieldEqual(t, "LimitDeliveryArea",
+		want.LimitDeliveryArea(), got.LimitDeliveryArea())
 
 	AssertPointerValuesOptionalFieldEqual(t, "LimitConsignments",
 		want.LimitConsignments(), got.LimitConsignments())

@@ -27,16 +27,13 @@ func main() {
 	payload := rtu.NewPayload(txID, validUntil).
 		SetDelegatedUse(false).
 		SetSellerName("Acme Corp")
-	// Sign the payload and generate the signed *rtu.RTU object with Version 1
-	signedObj, err := rtu.SignV1(payload, privKey)
+
+	// Sign the payload and generate the signed *rtu.PackedRTU object with Version 1
+	packedRtu, err := rtu.Sign(rtu.Version1, payload, privKey)
 	if err != nil {
 		panic(err)
 	}
-	// pack the signedObj to get the final base64-url encoded IOSSRTU
-	packedRtu, err := signedObj.Pack()
-	if err != nil {
-		panic(err)
-	}
+
 	// output your signed rtu
 	fmt.Println(packedRtu)
 }
