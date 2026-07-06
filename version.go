@@ -10,70 +10,18 @@ import (
 type Version int32
 
 const (
-	Version1 Version = 1
+	VersionNone Version = iota
+	Version1
 )
 
-// Validate gets the RTU object and len(RawRTU), when RawRTU is parsing. It can checks
-// the given data, WITHOUT validating Payload or anything like that. This validation is
-// used purely, to check the final signed RTU's size, version, payload size etc.
-func (v Version) Validate(rtu *RTU, sizeOfRaw int) error {
+func (v Version) Validate() error {
 	switch v {
+	case VersionNone:
+		return ErrUnknownVersion
 	case Version1:
-		return validateV1RTU(rtu, sizeOfRaw)
+		return nil
 	default:
-		return &ValidationError{
-			Field:   ValidationFieldVersion,
-			Message: fmt.Sprintf("invalid version: %d", v),
-		}
-	}
-}
-
-func (v Version) Signer() (Signer, error) {
-	switch v {
-	case Version1:
-		return signV1, nil
-	default:
-		return nil, ErrUnknownVersion
-	}
-}
-
-// parseSchemaPayload parses the raw payload from RTU.Payload and returns a SchemaPayload,
-// based on the version
-func (v Version) parseSchemaPayload(payload []byte) (SchemaPayload, error) {
-	switch v {
-	case Version1:
-		return parseV1RTU(payload)
-	default:
-		return nil, ErrUnknownVersion
-	}
-}
-
-// Parse only parses the raw payload with this Version. withValidation calls the SchemaPayload.Validate
-// method, to allow each version structure to define its own validation
-func (v Version) Parse(payload []byte, withValidation bool) (*Payload, error) {
-	// get new variable of the correct type
-	raw, err := v.parseSchemaPayload(payload)
-	if err != nil {
-		return nil, err
-	}
-	// validate structure, if withValidation is given
-	if withValidation {
-		if err = raw.Validate(); err != nil {
-			return nil, err
-		}
-	}
-	// get *Payload from structure
-	return raw.Payload()
-}
-
-// Make transforms the common Payload structure into the versions specific structure.
-// It then encodes it to its encoding type (like asn.1) and outputs the raw byte array.
-func (v Version) Make(payload *Payload) ([]byte, error) {
-	switch v {
-	case Version1:
-		return buildV1RTU(payload)
-	default:
-		return nil, ErrUnknownVersion
+		return fmt.Errorf("%w: %d", ErrUnknownVersion, v)
 	}
 }
 

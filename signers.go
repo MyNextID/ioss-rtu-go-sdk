@@ -2,44 +2,31 @@ package rtu
 
 import (
 	"crypto/rand"
-	"fmt"
 )
 
-type Signer func(payload *Payload, key *PrivateKey) (*RTU, error)
-
-// Sign uses the given Version to generate an RTU object, then packs it and returns a PackedRTU
-func Sign(version Version, payload *Payload, key *PrivateKey) (PackedRTU, error) {
-	signer, err := version.Signer()
+// Sign uses the UnsignedPayload given, and signs it with the PrivateKey (setting the private key's publicKey into the payload before signing)
+// It return the final PackedRTU
+func Sign(payload UnsignedPayload, key PrivateKey) (PackedRTU, error) {
+	// set the PublicKey to the payload
+	finalPayload, err := payload.SetPublicKey(key.Public())
 	if err != nil {
 		return "", err
 	}
-	obj, err := signer(payload, key)
+	// Marshal and output the raw bytes of the payload (to be signed)
+	raw, err := finalPayload.Marshal()
 	if err != nil {
 		return "", err
 	}
+	// use the PrivateKey to sign the payload with the given format
+	signature, err := key.Sign(payload.Format(), rand.Reader, raw)
+	if err != nil {
+		return "", err
+	}
+	// create the RTU object
+	obj, err := makeRTU(finalPayload, raw, signature)
+	if err != nil {
+		return "", err
+	}
+	// pack the object into a string
 	return obj.Pack()
-}
-
-// signV1 signs the given Payload object with ECDSA-P256 and creates a
-// Version1 RTU object.
-func signV1(payload *Payload, key *PrivateKey) (*RTU, error) {
-	if key.Algorithm() != AlgorithmEcdsaP256 {
-		return nil, fmt.Errorf("version 1 only support ecdsa-p256 private keys: %w", ErrKeyInvalid)
-	}
-	raw, err := Version1.Make(payload.SetCPK(key.GetCPK()))
-	if err != nil {
-		return nil, err
-	}
-	out := &RTU{
-		Version:   Version1,
-		Payload:   raw,
-		Signature: nil,
-		Algorithm: AlgorithmNone,
-	}
-	signature, err := key.Sign(rand.Reader, raw)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrSigning, err)
-	}
-	out.Signature = signature
-	return out, nil
 }

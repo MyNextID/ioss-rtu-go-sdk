@@ -3,6 +3,7 @@ package rtu
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"encoding/base64"
 	"fmt"
 )
 
@@ -20,9 +21,8 @@ func NewCPK(pubKey any, algorithm SignatureAlgorithm) (CPK, error) {
 				return nil, fmt.Errorf("%s expects ecdsa.GetPublicKey from P-256 curve, not %s: %w", algorithm, key.Curve, ErrCPKUnsupported)
 			}
 			return elliptic.MarshalCompressed(key.Curve, key.X, key.Y), nil
-		} else {
-			return nil, fmt.Errorf("%s expects *ecdsa.GetPublicKey: %w", algorithm, ErrKeyInvalid)
 		}
+		return nil, fmt.Errorf("%s expects *ecdsa.GetPublicKey: %w", algorithm, ErrKeyInvalid)
 	default:
 		return nil, fmt.Errorf("unknown signature algorithm: %s: %w", algorithm, ErrCPKUnsupported)
 	}
@@ -34,14 +34,36 @@ func (c CPK) Parse(algorithm SignatureAlgorithm) (PublicKey, error) {
 	case AlgorithmEcdsaP256:
 		x, y := elliptic.UnmarshalCompressed(elliptic.P256(), c)
 		if x == nil {
-			return PublicKey{}, fmt.Errorf("%s failed to unmarshal cpk: %w", algorithm, ErrKeyInvalid)
+			return nil, fmt.Errorf("%s failed to unmarshal cpk: %w", algorithm, ErrKeyInvalid)
 		}
-		return newPublicKey(&ecdsa.PublicKey{
+		return NewECPublicKey(&ecdsa.PublicKey{
 			Curve: elliptic.P256(),
 			X:     x,
 			Y:     y,
-		}, algorithm, c)
+		})
 	default:
-		return PublicKey{}, fmt.Errorf("unknown signature algorithm: %s: %w", algorithm, ErrCPKUnsupported)
+		return nil, fmt.Errorf("unknown signature algorithm: %s: %w", algorithm, ErrCPKUnsupported)
 	}
+}
+
+func (c CPK) Pack() PackedCPK {
+	return PackedCPK(base64.RawURLEncoding.EncodeToString(c))
+}
+
+type PackedCPK string
+
+func (p PackedCPK) CPK() (CPK, error) {
+	out, err := base64.RawURLEncoding.DecodeString(string(p))
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to decode PackedCPK", ErrDecoding)
+	}
+	return out, nil
+}
+
+func (p PackedCPK) PublicKey(algorithm SignatureAlgorithm) (PublicKey, error) {
+	temp, err := p.CPK()
+	if err != nil {
+		return nil, err
+	}
+	return temp.Parse(algorithm)
 }
