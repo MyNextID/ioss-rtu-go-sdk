@@ -5,8 +5,7 @@ import (
 )
 
 type RTU interface {
-	Format() Format
-	Version() Version
+	Type
 
 	Parse() (Payload, PublicKey, error)
 
@@ -18,8 +17,7 @@ type RTU interface {
 }
 
 type makeRTUMetadata interface {
-	Format() Format
-	Version() Version
+	Type
 
 	PublicKey() PublicKey
 }

@@ -5,9 +5,15 @@ import (
 	"time"
 )
 
-type Payload interface {
+// Type is an interface, that allows PrivateKey.Sign and PublicKey.Verify to know the metadata for their signature.
+type Type interface {
 	Format() Format
 	Version() Version
+}
+
+// Payload is an interface allowing reading of the RTU payload
+type Payload interface {
+	Type
 
 	ValidUntil() time.Time
 	TransactionID() *string
@@ -39,9 +45,9 @@ type UnsignedPayload interface {
 func New(format Format, version Version) (UnsignedPayload, error) {
 	switch format {
 	case JWT:
-		return NewJWT(version), nil
+		return newJWT(version), nil
 	case ASN1:
-		return NewASN1(version), nil
+		return newASN1(version), nil
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnknownFormat, format)
 	}

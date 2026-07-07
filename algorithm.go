@@ -11,10 +11,12 @@ type SignatureAlgorithm string
 
 func ParseJwa(alg jwa.SignatureAlgorithm) (SignatureAlgorithm, error) {
 	switch alg {
+	case jwa.EmptySignatureAlgorithm():
+		return AlgorithmNone, ErrNoSignatureAlgorithm
 	case jwa.ES256():
 		return AlgorithmEcdsaP256, nil
 	default:
-		return AlgorithmNone, fmt.Errorf("%w: unknown jwa algorithm: %s", ErrSignatureAlgorithmInvalid, alg)
+		return AlgorithmNone, fmt.Errorf("%w: unknown jwa algorithm: %s", ErrUnknownSignatureAlgorithm, alg)
 	}
 }
 
@@ -38,19 +40,23 @@ func (s SignatureAlgorithm) Digest(payload []byte) []byte {
 
 func (s SignatureAlgorithm) Validate() error {
 	switch s {
+	case AlgorithmNone:
+		return ErrNoSignatureAlgorithm
 	case AlgorithmEcdsaP256:
 		return nil
 	default:
-		return fmt.Errorf("%w: %s", ErrSignatureAlgorithmInvalid, s)
+		return fmt.Errorf("%w: %s", ErrUnknownSignatureAlgorithm, s)
 	}
 }
 
 // ToJWA returns the JSON Web Token Algorithm string for the given SignatureAlgorithm
 func (s SignatureAlgorithm) ToJWA() (jwa.SignatureAlgorithm, error) {
 	switch s {
+	case AlgorithmNone:
+		return jwa.EmptySignatureAlgorithm(), ErrNoSignatureAlgorithm
 	case AlgorithmEcdsaP256:
 		return jwa.ES256(), nil
 	default:
-		return jwa.EmptySignatureAlgorithm(), fmt.Errorf("%w: %s", ErrSignatureAlgorithmInvalid, s)
+		return jwa.EmptySignatureAlgorithm(), fmt.Errorf("%w: %s", ErrUnknownSignatureAlgorithm, s)
 	}
 }

@@ -30,20 +30,7 @@ func NewCPK(pubKey any, algorithm SignatureAlgorithm) (CPK, error) {
 
 // Parse tries to parse a public key, based on SignatureAlgorithm
 func (c CPK) Parse(algorithm SignatureAlgorithm) (PublicKey, error) {
-	switch algorithm {
-	case AlgorithmEcdsaP256:
-		x, y := elliptic.UnmarshalCompressed(elliptic.P256(), c)
-		if x == nil {
-			return nil, fmt.Errorf("%s failed to unmarshal cpk: %w", algorithm, ErrKeyInvalid)
-		}
-		return NewECPublicKey(&ecdsa.PublicKey{
-			Curve: elliptic.P256(),
-			X:     x,
-			Y:     y,
-		})
-	default:
-		return nil, fmt.Errorf("unknown signature algorithm: %s: %w", algorithm, ErrCPKUnsupported)
-	}
+	return validateCPK(algorithm, c)
 }
 
 func (c CPK) Pack() PackedCPK {

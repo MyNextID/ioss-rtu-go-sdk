@@ -10,8 +10,6 @@ import (
 
 	"github.com/lestrrat-go/jwx/v3/jwa"
 	"github.com/lestrrat-go/jwx/v3/jwk"
-
-	"github.com/MyNextID/ioss-rtu-go-sdk/internal/utils"
 )
 
 type jwtUnsignedPayload struct {
@@ -20,7 +18,7 @@ type jwtUnsignedPayload struct {
 	pub     PublicKey
 }
 
-func NewJWT(version Version) UnsignedPayload {
+func newJWT(version Version) UnsignedPayload {
 	return &jwtUnsignedPayload{
 		header: jwtRtuHeader{
 			V:   version,
@@ -28,6 +26,10 @@ func NewJWT(version Version) UnsignedPayload {
 		},
 		payload: jwtRtuPayload{},
 	}
+}
+
+func NewVersion1JWT(txId string, validUntil time.Time, delegatedUse bool) UnsignedPayload {
+	return newJWT(Version1).SetTransactionID(txId).SetValidUntil(validUntil).SetDelegatedUse(delegatedUse)
 }
 
 func (j *jwtUnsignedPayload) Format() Format {
@@ -110,7 +112,7 @@ func (j *jwtUnsignedPayload) SetPublicKey(pk PublicKey) (UnsignedPayload, error)
 }
 
 func (j *jwtUnsignedPayload) SetValidUntil(t time.Time) UnsignedPayload {
-	j.payload.Exp = new(t.Unix())
+	j.payload.Exp = new(t.UTC().Unix())
 	return j
 }
 
@@ -313,7 +315,3 @@ func DecodeJWT(packed PackedRTU) (RTU, error) {
 		signature: signature,
 	}, nil
 }
-
-var (
-	jwtFieldMap = utils.Alias[string]{}
-)

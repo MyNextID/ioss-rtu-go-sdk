@@ -18,12 +18,11 @@ const (
 	fullRTUValidHours    = 48
 	fullRTULimitConsign  = 10
 
-	maxRTUValidHours     = 24
-	maxSellerNameLen     = 100
-	maxSellerAddressLen  = 100
-	maxTransactionIDLen  = 50
-	maxConsignmentIDLen  = 35
-	maxLimitConsignments = 100
+	maxRTUValidHours    = 24
+	maxSellerNameLen    = 100
+	maxSellerAddressLen = 100
+	maxTransactionIDLen = 50
+	maxConsignmentIDLen = 35
 )
 
 // GeneratePKCS8PEM returns a PEM-encoded PKCS#8 private key for testing.
@@ -74,7 +73,7 @@ func GenerateKey(tb testing.TB) *ecdsa.PrivateKey {
 	return priv
 }
 
-func GenerateRTUPrivateKey(tb testing.TB) *rtu.PrivateKey {
+func GenerateRTUPrivateKey(tb testing.TB) rtu.PrivateKey {
 	out, err := rtu.NewECPrivateKey(GenerateKey(tb))
 	if err != nil {
 		tb.Fatalf("failed to generate RTU private key: %v", err)
@@ -82,31 +81,62 @@ func GenerateRTUPrivateKey(tb testing.TB) *rtu.PrivateKey {
 	return out
 }
 
-func MinimalRTU() *rtu.Payload {
-	return rtu.NewPayload("tx-minimal",
-		time.Now().Add(minimalRTUValidHours*time.Hour)).
-		SetDelegatedUse(false)
+func GenerateRTUPrivateKeyWithJWK(tb testing.TB) rtu.PrivateKey {
+	key := GenerateRTUPrivateKey(tb)
+	if key != nil {
+		var err error
+		key, err = rtu.AddJWKToPrivateKey(key)
+		if err != nil {
+			tb.Fatalf("failed to generate RTU private key with JWK: %v", err)
+		}
+	}
+	return key
 }
 
-func FullRTU() *rtu.Payload {
-	return rtu.NewPayload("tx-full-encode-test",
-		time.Now().Add(fullRTUValidHours*time.Hour)).
-		SetDelegatedUse(true).
+func EmptyRTU(tb testing.TB, format rtu.Format, version rtu.Version) rtu.UnsignedPayload {
+	out, err := rtu.New(format, version)
+	if err != nil {
+		tb.Fatalf("failed to create RTU payload: %v", err)
+	}
+	return out
+}
+
+func MinimalRTU() rtu.UnsignedPayload {
+	return rtu.NewVersion1ASN("tx-minimal",
+		time.Now().Add(minimalRTUValidHours*time.Hour), false)
+}
+
+func MinimalJWTRTU() rtu.UnsignedPayload {
+	return rtu.NewVersion1JWT("tx-minimal",
+		time.Now().Add(minimalRTUValidHours*time.Hour), false)
+}
+
+func FullRTU() rtu.UnsignedPayload {
+	return rtu.NewVersion1ASN("tx-full-encode-test",
+		time.Now().Add(fullRTUValidHours*time.Hour), true).
 		SetSellerName("Acme Corp").
 		SetSellerAddress("1 Commerce Way").
 		SetLimitDeliveryArea("DE-BY").
-		SetConsignments([]string{"CNS001", "CNS002", "CNS003"})
+		SetConsignmentIDs([]string{"CNS001", "CNS002", "CNS003"})
+}
+
+func FullJWTRTU() rtu.UnsignedPayload {
+	return rtu.NewVersion1JWT("tx-full-encode-test",
+		time.Now().Add(fullRTUValidHours*time.Hour), true).
+		SetSellerName("Acme Corp").
+		SetSellerAddress("1 Commerce Way").
+		SetLimitDeliveryArea("DE-BY").
+		SetConsignmentIDs([]string{"CNS001", "CNS002", "CNS003"})
 }
 
 // MaxRTU returns the largest possible fully-valid IOSSRTU for size-boundary testing.
-func MaxRTU() *rtu.Payload {
-	return rtu.NewPayload(strings.Repeat("C", maxTransactionIDLen),
-		time.Now().Add(maxRTUValidHours*time.Hour)).
-		SetDelegatedUse(true).
+func MaxRTU() rtu.UnsignedPayload {
+	return rtu.NewVersion1ASN(strings.Repeat("C", maxTransactionIDLen),
+		time.Now().Add(maxRTUValidHours*time.Hour), true).
 		SetSellerName(strings.Repeat("A", maxSellerNameLen)).
 		SetSellerAddress(strings.Repeat("B", maxSellerAddressLen)).
 		SetLimitDeliveryArea("US-ABCD").
-		SetConsignments([]string{
+		SetConsignmentIDs([]string{
 			strings.Repeat("1", maxConsignmentIDLen), strings.Repeat("2", maxConsignmentIDLen),
 			strings.Repeat("3", maxConsignmentIDLen), strings.Repeat("4", maxConsignmentIDLen),
 			strings.Repeat("5", maxConsignmentIDLen), strings.Repeat("6", maxConsignmentIDLen),
@@ -115,28 +145,34 @@ func MaxRTU() *rtu.Payload {
 		})
 }
 
-func SignedRTUV1(tb testing.TB) *rtu.RTU {
+func MaxJWTRTU() rtu.UnsignedPayload {
+	return rtu.NewVersion1JWT(strings.Repeat("C", maxTransactionIDLen),
+		time.Now().Add(maxRTUValidHours*time.Hour), true).
+		SetSellerName(strings.Repeat("A", maxSellerNameLen)).
+		SetSellerAddress(strings.Repeat("B", maxSellerAddressLen)).
+		SetLimitDeliveryArea("US-ABCD").
+		SetConsignmentIDs([]string{
+			strings.Repeat("1", maxConsignmentIDLen), strings.Repeat("2", maxConsignmentIDLen),
+			strings.Repeat("3", maxConsignmentIDLen), strings.Repeat("4", maxConsignmentIDLen),
+			strings.Repeat("5", maxConsignmentIDLen), strings.Repeat("6", maxConsignmentIDLen),
+			strings.Repeat("7", maxConsignmentIDLen), strings.Repeat("8", maxConsignmentIDLen),
+			strings.Repeat("9", maxConsignmentIDLen), strings.Repeat("0", maxConsignmentIDLen),
+		})
+}
+
+func SignRTU(tb testing.TB, payload rtu.UnsignedPayload, key rtu.PrivateKey) rtu.PackedRTU {
 	tb.Helper()
 
-	packed, err := rtu.Sign(rtu.Version1, MinimalRTU(), GenerateRTUPrivateKey(tb))
+	out, err := rtu.Sign(payload, key)
 	if err != nil {
 		tb.Fatalf("failed to sign RTU: %v", err)
-	}
-
-	out, err := packed.Unpack()
-	if err != nil {
-		tb.Fatalf("failed to unpack packed rtu: %v", err)
 	}
 
 	return out
 }
 
-func SignedPackedRTUV1(tb testing.TB) rtu.PackedRTU {
-	out, err := SignedRTUV1(tb).Pack()
-	if err != nil {
-		tb.Fatalf("failed to pack RTU: %v", err)
-	}
-	return out
+func SignedRTU(tb testing.TB) rtu.PackedRTU {
+	return SignRTU(tb, MinimalRTU(), GenerateRTUPrivateKey(tb))
 }
 
 // =============================================================================
@@ -162,15 +198,13 @@ func AssertPointerValuesRequiredFieldEqual[V comparable](tb testing.TB, name str
 func AssertPointerValuesOptionalFieldEqual[V comparable](tb testing.TB, name string, want, got *V) {
 	tb.Helper()
 
-	if want != nil {
-		if got == nil {
-			tb.Errorf("%s expected %v, got nil", name, *want)
-			return
+	if want == nil {
+		if got != nil {
+			tb.Errorf("%s expected nil, got %v", name, *got)
 		}
-	} else if got != nil {
-		tb.Errorf("%s expected nil, got %v", name, *got)
 		return
-	} else {
+	} else if got == nil {
+		tb.Errorf("%s expected %v, got nil", name, *want)
 		return
 	}
 
@@ -179,12 +213,19 @@ func AssertPointerValuesOptionalFieldEqual[V comparable](tb testing.TB, name str
 	}
 }
 
-func AssertPayloadEqual(t *testing.T, want, got *rtu.Payload) {
+func AssertPayloadEqual(t *testing.T, want, got rtu.Payload) {
 	t.Helper()
 
 	// DelegatedUse is required
 	AssertPointerValuesRequiredFieldEqual(t, "DelegatedUse",
 		want.DelegatedUse(), got.DelegatedUse())
+
+	AssertPointerValuesRequiredFieldEqual(t, "TransactionID",
+		want.TransactionID(), got.TransactionID())
+
+	if !got.ValidUntil().Equal(want.ValidUntil()) {
+		t.Errorf("ValidUntil: got %v, want %v", got.ValidUntil(), want.ValidUntil())
+	}
 
 	// optional fields
 	AssertPointerValuesOptionalFieldEqual(t, "SellerName",
@@ -192,14 +233,6 @@ func AssertPayloadEqual(t *testing.T, want, got *rtu.Payload) {
 
 	AssertPointerValuesOptionalFieldEqual(t, "SellerAddress",
 		want.SellerAddress(), got.SellerAddress())
-
-	if got.TransactionID() != want.TransactionID() {
-		t.Errorf("TransactionID: got %q, want %q", got.TransactionID(), want.TransactionID())
-	}
-
-	if !got.ValidUntil().Equal(want.ValidUntil()) {
-		t.Errorf("ValidUntil: got %v, want %v", got.ValidUntil(), want.ValidUntil())
-	}
 
 	AssertPointerValuesOptionalFieldEqual(t, "LimitDeliveryArea",
 		want.LimitDeliveryArea(), got.LimitDeliveryArea())
@@ -214,6 +247,7 @@ func AssertPayloadEqual(t *testing.T, want, got *rtu.Payload) {
 		t.Errorf("ConsignmentIDs length: got %d, want %d", len(gotIds), len(wantIds))
 		return
 	}
+
 	for i := range wantIds {
 		if gotIds[i] != wantIds[i] {
 			t.Errorf("ConsignmentIDs[%d]: got %q, want %q", i, gotIds[i], wantIds[i])

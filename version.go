@@ -17,7 +17,7 @@ const (
 func (v Version) Validate() error {
 	switch v {
 	case VersionNone:
-		return ErrUnknownVersion
+		return ErrNoVersion
 	case Version1:
 		return nil
 	default:

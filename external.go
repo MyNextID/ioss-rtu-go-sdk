@@ -59,6 +59,26 @@ func (e *ExternalSigner) validatePayload(data Payload) error {
 	return nil
 }
 
+func (e *ExternalSigner) Parse(payload []byte) (out Payload, err error) {
+	var unsignedRtu RTU
+	switch e.Format() {
+	case ASN1:
+		unsignedRtu, err = newAsn1RtuObject(e, payload, nil)
+		if err != nil {
+			return nil, err
+		}
+	case JWT:
+		unsignedRtu, err = newJwtRtu(e, payload, nil)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("%w: unknown format %s", ErrUnknownFormat, e.Format())
+	}
+	out, _, err = unsignedRtu.Parse()
+	return out, err
+}
+
 func (e *ExternalSigner) ComputeDigest(data UnsignedPayload) (digest []byte, payload []byte, err error) {
 	// ensure the given payload is the correct format and version of rtu.Payload
 	if err = e.validatePayload(data); err != nil {
@@ -96,7 +116,7 @@ func (e *ExternalSigner) ConstructSignedObj(payload []byte, signature []byte) (R
 	}
 
 	// verify received signature with our public key
-	err := e.publicKey.Verify(e.Format(), payload, signature)
+	err := e.publicKey.Verify(e, payload, signature)
 	if err != nil {
 		return nil, err
 	}

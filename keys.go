@@ -17,8 +17,9 @@ import (
 type Verifier interface {
 	// Verify verifies the signature, based on the given pubKey and payload.
 	// payload must not already be digested, as this function takes care of that.
-	// pubKey can be a CPK, in which case this method will parse the CPK and get the correct key
-	Verify(format Format, payload, signature []byte) error
+	// rtuType is needed, to correctly prepare the verification of the signature
+	// (jwt signature != asn1 signature formats)
+	Verify(rtuType Type, payload, signature []byte) error
 }
 
 type PublicKey interface {
@@ -35,6 +36,8 @@ type PublicKey interface {
 
 type PublicKeyJWK interface {
 	PublicKey
+	// JWK returns the jwk.Key of this PublicKey.
+	// If a PublicKey implements this interface, JWT RTUs will have the "jwk" header instead of "cpk"
 	JWK() jwk.Key
 }
 
@@ -93,11 +96,11 @@ func NewECPublicKey(pub *ecdsa.PublicKey) (PublicKey, error) {
 	}, nil
 }
 
-func (p *ecdsaPublicKey) Verify(format Format, payload, signature []byte) error {
+func (p *ecdsaPublicKey) Verify(rtuType Type, payload, signature []byte) error {
 	if err := p.publicKeyMetadata.Verify(payload, signature); err != nil {
 		return err
 	}
-	switch format {
+	switch rtuType.Format() {
 	case JWT:
 		r := new(big.Int)
 		s := new(big.Int)
@@ -148,7 +151,7 @@ func NewJWKPublicKey(key jwk.Key) (PublicKeyJWK, error) {
 	}
 }
 
-func ConvertPublicKeyToJWK(key PublicKey) (PublicKeyJWK, error) {
+func AddJWKToPublicKey(key PublicKey) (PublicKeyJWK, error) {
 	if key == nil {
 		return nil, fmt.Errorf("%w: public key cannot be nil", ErrKeyInvalid)
 	}
@@ -162,8 +165,8 @@ func ConvertPublicKeyToJWK(key PublicKey) (PublicKeyJWK, error) {
 	return NewJWKPublicKey(temp)
 }
 
-func (j *jwkPublicKey) Verify(format Format, payload, signature []byte) error {
-	return j.wrapped.Verify(format, payload, signature)
+func (j *jwkPublicKey) Verify(rtuType Type, payload, signature []byte) error {
+	return j.wrapped.Verify(rtuType, payload, signature)
 }
 
 func (j *jwkPublicKey) CPK() CPK {
@@ -195,7 +198,38 @@ type PrivateKey interface {
 	// Sign allows this private key to sign the given payload, by digesting it with SignatureAlgorithm
 	// and based on the same algorithm apply the correct signature function, outputting signature and any
 	// errors that happened while signing.
-	Sign(format Format, rand io.Reader, payload []byte) ([]byte, error)
+	Sign(rtuType Type, rand io.Reader, payload []byte) ([]byte, error)
+}
+
+type withJwkPrivateKey struct {
+	priv             PrivateKey
+	publicKeyWithJWK PublicKeyJWK
+}
+
+func AddJWKToPrivateKey(key PrivateKey) (PrivateKey, error) {
+	if _, ok := key.Public().(PublicKeyJWK); ok {
+		return key, nil
+	}
+	pub, err := AddJWKToPublicKey(key.Public())
+	if err != nil {
+		return nil, err
+	}
+	return &withJwkPrivateKey{
+		priv:             key,
+		publicKeyWithJWK: pub,
+	}, nil
+}
+
+func (w *withJwkPrivateKey) Public() PublicKey {
+	return w.publicKeyWithJWK
+}
+
+func (w *withJwkPrivateKey) Raw() crypto.PrivateKey {
+	return w.priv.Raw()
+}
+
+func (w *withJwkPrivateKey) Sign(rtuType Type, rand io.Reader, payload []byte) ([]byte, error) {
+	return w.priv.Sign(rtuType, rand, payload)
 }
 
 type privateKeyMetadata struct {
@@ -212,12 +246,15 @@ func (p privateKeyMetadata) Public() PublicKey {
 	return p.publicKey
 }
 
-func (p privateKeyMetadata) Sign(format Format, rand io.Reader, payload []byte) ([]byte, error) {
+func (p privateKeyMetadata) Sign(rtuType Type, rand io.Reader, payload []byte) ([]byte, error) {
 	// this should be called with every implementation of privateKeyMetadata. This only verifies the inputs
 	if rand == nil {
 		return nil, errors.New("rand is nil")
 	}
-	if err := format.Validate(); err != nil {
+	if err := rtuType.Format().Validate(); err != nil {
+		return nil, err
+	}
+	if err := rtuType.Version().Validate(); err != nil {
 		return nil, err
 	}
 	if len(payload) == 0 {
@@ -247,11 +284,11 @@ func (p *ecdsaPrivateKey) Raw() crypto.PrivateKey {
 	return p.key
 }
 
-func (p *ecdsaPrivateKey) Sign(format Format, rand io.Reader, payload []byte) ([]byte, error) {
-	if _, err := p.privateKeyMetadata.Sign(format, rand, payload); err != nil {
+func (p *ecdsaPrivateKey) Sign(rtuType Type, rand io.Reader, payload []byte) ([]byte, error) {
+	if _, err := p.privateKeyMetadata.Sign(rtuType, rand, payload); err != nil {
 		return nil, err
 	}
-	switch format {
+	switch rtuType.Format() {
 	case JWT:
 		r, s, err := ecdsa.Sign(rand, p.key, p.Public().Algorithm().Digest(payload))
 		if err != nil {

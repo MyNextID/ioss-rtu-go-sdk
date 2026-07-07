@@ -3,8 +3,6 @@ package rtu
 import (
 	"errors"
 	"fmt"
-
-	"github.com/MyNextID/ioss-rtu-go-sdk/internal/utils"
 )
 
 var (
@@ -18,23 +16,25 @@ var (
 
 	ErrFieldRequired = errors.New("field is required")
 
-	ErrSigning                   = errors.New("signing error")
-	ErrSignatureAlgorithmInvalid = errors.New("invalid signature algorithm")
-	ErrNoSignatureAlgorithm      = errors.New("no signature algorithm")
-	ErrSignatureInvalid          = errors.New("signature invalid")
-	ErrSignatureIsNil            = errors.New("signature is empty")
-	ErrPayloadIsNil              = errors.New("payload is empty")
+	ErrSigning          = errors.New("signing error")
+	ErrSignatureInvalid = errors.New("signature invalid")
+	ErrSignatureIsNil   = errors.New("signature is empty")
+	ErrPayloadIsNil     = errors.New("payload is empty")
 
-	ErrKeyInvalid     = errors.New("invalid key")
-	ErrUnknownVersion = errors.New("unknown version")
-	ErrUnknownFormat  = errors.New("unknown format")
-	ErrEmptyInput     = errors.New("empty input")
+	ErrKeyInvalid                = errors.New("invalid key")
+	ErrUnknownSignatureAlgorithm = errors.New("unknown signature algorithm")
+	ErrNoSignatureAlgorithm      = errors.New("no signature algorithm")
+	ErrUnknownVersion            = errors.New("unknown version")
+	ErrNoVersion                 = errors.New("no version")
+	ErrUnknownFormat             = errors.New("unknown format")
+	ErrNoFormat                  = errors.New("no format")
+	ErrEmptyInput                = errors.New("empty input")
 )
 
 // ValidationError carries per-field details
 type ValidationError struct {
-	Field string
-	error error
+	Field   string
+	Message error
 }
 
 func NewValidationError(field string, err error) *ValidationError {
@@ -48,13 +48,9 @@ func NewValidationError(field string, err error) *ValidationError {
 		return out
 	}
 	return &ValidationError{
-		Field: field,
-		error: err,
+		Field:   field,
+		Message: err,
 	}
-}
-
-func NewValidationErrorForField(format Format, field string, err error) *ValidationError {
-	return NewValidationError(format.getFieldAliasMap().Get(field), err)
 }
 
 // ValidationFields valid values
@@ -80,23 +76,9 @@ const (
 )
 
 func (e *ValidationError) Error() string {
-	return fmt.Sprintf("validation error '%q': %s", e.Field, e.error.Error())
+	return fmt.Sprintf("validation error '%q': %s", e.Field, e.Message.Error())
 }
 
 func (e *ValidationError) Unwrap() error {
-	return e.error
-}
-
-type ValidationErrorBuilder struct {
-	alias utils.Alias[string]
-}
-
-func NewValidationErrorBuilder(format Format) *ValidationErrorBuilder {
-	return &ValidationErrorBuilder{
-		alias: format.getFieldAliasMap(),
-	}
-}
-
-func (b *ValidationErrorBuilder) Build(field string, err error) error {
-	return NewValidationError(b.alias.Get(field), err)
+	return e.Message
 }

@@ -5,8 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"time"
-
-	"github.com/MyNextID/ioss-rtu-go-sdk/internal/utils"
 )
 
 func asn1OmittableString(val string) *string {
@@ -42,11 +40,16 @@ type asn1UnsignedPayload struct {
 	pub PublicKey
 }
 
-func NewASN1(version Version) UnsignedPayload {
+func newASN1(version Version) UnsignedPayload {
 	return &asn1UnsignedPayload{
 		ver: version,
 		obj: asn1PayloadObj{},
 	}
+}
+
+// NewVersion1ASN is a wrapper of New, that makes an ASN1 encoded Version1 RTU, but takes as arguments the fields, that are required in Version1
+func NewVersion1ASN(txID string, validUntil time.Time, delegatedUse bool) UnsignedPayload {
+	return newASN1(Version1).SetTransactionID(txID).SetValidUntil(validUntil).SetDelegatedUse(delegatedUse)
 }
 
 func (a *asn1UnsignedPayload) Format() Format {
@@ -104,7 +107,7 @@ func (a *asn1UnsignedPayload) SetPublicKey(pk PublicKey) (UnsignedPayload, error
 }
 
 func (a *asn1UnsignedPayload) SetValidUntil(t time.Time) UnsignedPayload {
-	a.obj.ValidUntil = t.Unix()
+	a.obj.ValidUntil = t.UTC().Unix()
 	return a
 }
 
@@ -159,6 +162,8 @@ type asn1Rtu struct {
 	obj  asn1RtuObject
 }
 
+// newAsn1RtuObject creates an RTU object, from an ASN1 encoded payload (asn1RtuObject.Payload) and a signature.
+// no validation are done at this stage, as this function is reused, to allow ExternalSigner to rebuild the Payload from raw bytes
 func newAsn1RtuObject(metadata makeRTUMetadata, payload, signature []byte) (RTU, error) {
 	switch metadata.Version() {
 	case Version1:
@@ -168,6 +173,7 @@ func newAsn1RtuObject(metadata makeRTUMetadata, payload, signature []byte) (RTU,
 	}
 }
 
+// newAsn1RtuObjectVersion1 creates asn1RtuObject for Version1
 func newAsn1RtuObjectVersion1(metadata makeRTUMetadata, payload, signature []byte) (RTU, error) {
 	pubKey := metadata.PublicKey()
 	if pubKey == nil {
@@ -175,7 +181,7 @@ func newAsn1RtuObjectVersion1(metadata makeRTUMetadata, payload, signature []byt
 	}
 	alg := pubKey.Algorithm()
 	if alg != AlgorithmEcdsaP256 {
-		return nil, fmt.Errorf("%w: unsupported algorithm", ErrSignatureAlgorithmInvalid)
+		return nil, fmt.Errorf("%w: unsupported algorithm %s", ErrKeyInvalid, alg)
 	}
 	out := asn1RtuObject{
 		Version:   metadata.Version(),
@@ -265,7 +271,3 @@ func DecodeASN1(packed PackedRTU) (RTU, error) {
 		obj:  out,
 	}, nil
 }
-
-var (
-	asn1FieldMap = utils.Alias[string]{}
-)

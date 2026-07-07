@@ -21,7 +21,7 @@ func Verify(obj PackedRTU, opts ...VerifyOption) (Payload, PublicKey, error) {
 		}
 	}
 	if !hasVerifyOption[*noSignatureVerification](opts) {
-		if err = pub.Verify(val.Format(), val.Payload(), val.Signature()); err != nil {
+		if err = pub.Verify(val, val.Payload(), val.Signature()); err != nil {
 			return nil, nil, err
 		}
 	}
