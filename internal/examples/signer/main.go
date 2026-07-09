@@ -20,11 +20,12 @@ func main() {
 		panic(err)
 	}
 
-	out := signJWTWithJWK(priv)
+	out := signASN(priv)
 
 	fmt.Println(out)
 }
 
+// change signASN with this function, to get a JWS Compact RTU with a 'jwk' header
 func signJWTWithJWK(priv rtu.PrivateKey) rtu.PackedRTU {
 	key, err := rtu.AddJWKToPrivateKey(priv)
 	if err != nil {
@@ -33,6 +34,7 @@ func signJWTWithJWK(priv rtu.PrivateKey) rtu.PackedRTU {
 	return signJWT(key)
 }
 
+// change signASN with this function, to get a JWS Compact RTU with a 'cpk' header
 func signJWT(priv rtu.PrivateKey) rtu.PackedRTU {
 	out, err := rtu.Sign(rtu.NewVersion1JWT("tx-id-001", time.Now().Add(time.Hour), false), priv)
 	if err != nil {
@@ -41,6 +43,7 @@ func signJWT(priv rtu.PrivateKey) rtu.PackedRTU {
 	return out
 }
 
+// the QR code ready encoding for RTUs (ASN1 encoded RTU)
 func signASN(priv rtu.PrivateKey) rtu.PackedRTU {
 	out, err := rtu.Sign(rtu.NewVersion1ASN("tx-id-001", time.Now().Add(time.Hour), false), priv)
 	if err != nil {

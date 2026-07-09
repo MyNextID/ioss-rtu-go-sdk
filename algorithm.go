@@ -9,10 +9,11 @@ import (
 
 type SignatureAlgorithm string
 
+// ParseJwa takes a jwa.SignatureAlgorithm and parses a SignatureAlgorithm. (example "ES256" -> "ecdsa-p256")
 func ParseJwa(alg jwa.SignatureAlgorithm) (SignatureAlgorithm, error) {
 	switch alg {
 	case jwa.EmptySignatureAlgorithm():
-		return AlgorithmNone, ErrNoSignatureAlgorithm
+		return AlgorithmNone, nil
 	case jwa.ES256():
 		return AlgorithmEcdsaP256, nil
 	default:
@@ -21,7 +22,9 @@ func ParseJwa(alg jwa.SignatureAlgorithm) (SignatureAlgorithm, error) {
 }
 
 const (
-	AlgorithmNone      SignatureAlgorithm = ""
+	// AlgorithmNone is used when there is no algorithm given in the RTU
+	AlgorithmNone SignatureAlgorithm = ""
+	// AlgorithmEcdsaP256 is the signature algorithm for ECDSA with P-256 curve, signing a SHA256 hash.
 	AlgorithmEcdsaP256 SignatureAlgorithm = "ecdsa-p256"
 )
 
@@ -38,6 +41,7 @@ func (s SignatureAlgorithm) Digest(payload []byte) []byte {
 	}
 }
 
+// Validate validates the SignatureAlgorithm, to ensure this library supports it fully
 func (s SignatureAlgorithm) Validate() error {
 	switch s {
 	case AlgorithmNone:

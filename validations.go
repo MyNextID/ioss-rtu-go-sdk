@@ -22,6 +22,10 @@ var (
 	version1LimitDeliveryAreaRegex = regexp.MustCompile(`^[A-Z]{2}-[A-Z0-9]{1,4}$`)
 )
 
+/*
+	Validations for CPK types (and parsing)
+*/
+
 func validateEcdsaP256CPK(cpk CPK) (PublicKey, error) {
 	if len(cpk) != ecdsaP256CpkLength {
 		return nil, NewValidationError(ValidationFieldCPK, fmt.Errorf("must be exactly %d bytes, got %d", ecdsaP256CpkLength, len(cpk)))
@@ -44,14 +48,9 @@ func validateEcdsaP256CPK(cpk CPK) (PublicKey, error) {
 	})
 }
 
-func validateCPK(algorithm SignatureAlgorithm, cpk CPK) (PublicKey, error) {
-	switch algorithm {
-	case AlgorithmEcdsaP256:
-		return validateEcdsaP256CPK(cpk)
-	default:
-		return nil, NewValidationError(ValidationFieldCPK, fmt.Errorf("unsupported signature algorithm: %s", algorithm))
-	}
-}
+/*
+	Validations of Payload fields. Since Payload has Version and Format information, it can be implemented differently based on Version and/or Format inside the function
+*/
 
 func ValidateTransactionID(payload Payload) error {
 	transactionID := payload.TransactionID()
@@ -179,6 +178,7 @@ func ValidateSellerAddress(payload Payload) error {
 	return nil
 }
 
+// ValidatePayload calls every field validation on Payload, and returns the first sign of an error.
 func ValidatePayload(payload Payload) error {
 
 	if err := ValidateValidUntil(payload); err != nil {
@@ -212,6 +212,7 @@ func ValidatePayload(payload Payload) error {
 	return nil
 }
 
+// ValidateRTU validates the RTUs metadata (in case of ASN, validates the final RTU byte size is within perameters)
 func ValidateRTU(rtu RTU) error {
 	if err := rtu.Format().Validate(); err != nil {
 		return err

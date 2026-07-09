@@ -6,7 +6,6 @@ import (
 	"crypto/elliptic"
 	"crypto/x509"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -17,7 +16,7 @@ import (
 type Verifier interface {
 	// Verify verifies the signature, based on the given pubKey and payload.
 	// payload must not already be digested, as this function takes care of that.
-	// rtuType is needed, to correctly prepare the verification of the signature
+	// Type is needed, to correctly prepare the verification of the signature
 	// (jwt signature != asn1 signature formats)
 	Verify(rtuType Type, payload, signature []byte) error
 }
@@ -77,6 +76,7 @@ type ecdsaPublicKey struct {
 	key *ecdsa.PublicKey
 }
 
+// NewECPublicKey creates a PublicKey from an *ecdsa.PublicKey
 func NewECPublicKey(pub *ecdsa.PublicKey) (PublicKey, error) {
 	alg := AlgorithmNone
 	switch pub.Curve {
@@ -131,6 +131,7 @@ type jwkPublicKey struct {
 	wrapped PublicKey
 }
 
+// NewJWKPublicKey creates a PublicKeyJWK from the given jwk.Key. Only jwk.ECDSAPublicKey is currently supported
 func NewJWKPublicKey(key jwk.Key) (PublicKeyJWK, error) {
 	switch pub := key.(type) {
 	case jwk.ECDSAPublicKey:
@@ -151,6 +152,8 @@ func NewJWKPublicKey(key jwk.Key) (PublicKeyJWK, error) {
 	}
 }
 
+// AddJWKToPublicKey wraps PublicKey and creates a PublicKeyJWK.
+// Can be used when building an ExternalSigner, to ensure the JWT encoded RTUs will have a 'jwk' header.
 func AddJWKToPublicKey(key PublicKey) (PublicKeyJWK, error) {
 	if key == nil {
 		return nil, fmt.Errorf("%w: public key cannot be nil", ErrKeyInvalid)
@@ -206,6 +209,7 @@ type withJwkPrivateKey struct {
 	publicKeyWithJWK PublicKeyJWK
 }
 
+// AddJWKToPrivateKey builds a PrivateKey, which returns a PublicKeyJWK when Public() method is called
 func AddJWKToPrivateKey(key PrivateKey) (PrivateKey, error) {
 	if _, ok := key.Public().(PublicKeyJWK); ok {
 		return key, nil
@@ -249,7 +253,7 @@ func (p privateKeyMetadata) Public() PublicKey {
 func (p privateKeyMetadata) Sign(rtuType Type, rand io.Reader, payload []byte) ([]byte, error) {
 	// this should be called with every implementation of privateKeyMetadata. This only verifies the inputs
 	if rand == nil {
-		return nil, errors.New("rand is nil")
+		return nil, fmt.Errorf("%w: rand is nil", ErrSigning)
 	}
 	if err := rtuType.Format().Validate(); err != nil {
 		return nil, err
@@ -292,14 +296,18 @@ func (p *ecdsaPrivateKey) Sign(rtuType Type, rand io.Reader, payload []byte) ([]
 	case JWT:
 		r, s, err := ecdsa.Sign(rand, p.key, p.Public().Algorithm().Digest(payload))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: ecdsa JWT signing failed, reason: %s", ErrSigning, err.Error())
 		}
 		sig := make([]byte, 64)
 		r.FillBytes(sig[:32])
 		s.FillBytes(sig[32:])
 		return sig, nil
 	default:
-		return ecdsa.SignASN1(rand, p.key, p.Public().Algorithm().Digest(payload))
+		sig, err := ecdsa.SignASN1(rand, p.key, p.Public().Algorithm().Digest(payload))
+		if err != nil {
+			return nil, fmt.Errorf("%w: ecdsa ASN1 signing failed, reason: %s", ErrSigning, err.Error())
+		}
+		return sig, nil
 	}
 }
 

@@ -30,15 +30,25 @@ func NewCPK(pubKey any, algorithm SignatureAlgorithm) (CPK, error) {
 
 // Parse tries to parse a public key, based on SignatureAlgorithm
 func (c CPK) Parse(algorithm SignatureAlgorithm) (PublicKey, error) {
-	return validateCPK(algorithm, c)
+	switch algorithm {
+	case AlgorithmEcdsaP256:
+		return validateEcdsaP256CPK(c)
+	default:
+		return nil, NewValidationError(ValidationFieldCPK, fmt.Errorf("unsupported signature algorithm: %s", algorithm))
+	}
 }
 
+// Pack encodes this CPK to a PackedCPK (used in JWT encoded 'cpk' field, as it is a string not a byte array)
 func (c CPK) Pack() PackedCPK {
 	return PackedCPK(base64.RawURLEncoding.EncodeToString(c))
 }
 
+// PackedCPK is a base64url encoded representation of a CPK
 type PackedCPK string
 
+// CPK tries to base64url decode the PackedCPK and returns the CPK if successful.
+// The returned CPK should not be considered to be "valid", until it has been parsed via CPK.Parse with its
+// corresponding SignatureAlgorithm
 func (p PackedCPK) CPK() (CPK, error) {
 	out, err := base64.RawURLEncoding.DecodeString(string(p))
 	if err != nil {
@@ -47,6 +57,7 @@ func (p PackedCPK) CPK() (CPK, error) {
 	return out, nil
 }
 
+// PublicKey decodes the PackedCPK and parses it, to get the PublicKey directly
 func (p PackedCPK) PublicKey(algorithm SignatureAlgorithm) (PublicKey, error) {
 	temp, err := p.CPK()
 	if err != nil {
