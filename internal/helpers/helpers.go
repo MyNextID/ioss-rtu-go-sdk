@@ -171,8 +171,23 @@ func SignRTU(tb testing.TB, payload rtu.UnsignedPayload, key rtu.PrivateKey) rtu
 	return out
 }
 
+func SignRawRTU(tb testing.TB, payload rtu.UnsignedPayload, key rtu.PrivateKey) rtu.RTU {
+	tb.Helper()
+
+	out, err := rtu.SignRaw(payload, key)
+	if err != nil {
+		tb.Fatalf("failed to sign RTU: %v", err)
+	}
+
+	return out
+}
+
 func SignedRTU(tb testing.TB) rtu.PackedRTU {
 	return SignRTU(tb, MinimalRTU(), GenerateRTUPrivateKey(tb))
+}
+
+func SignedRawRTU(tb testing.TB) rtu.RTU {
+	return SignRawRTU(tb, MinimalRTU(), GenerateRTUPrivateKey(tb))
 }
 
 // =============================================================================
