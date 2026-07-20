@@ -24,7 +24,7 @@ func TestLoadPrivateKeyPEM_PKCS8(t *testing.T) {
 		t.Fatalf("LoadPrivateKeyPEM() unexpected error: %v", err)
 	}
 
-	loadedPublicKey := loadedKey.GetPublicKey()
+	loadedPublicKey := loadedKey.Public().Raw()
 	if loadedPublicKey == nil {
 		t.Fatalf("PrivateKey.GetPublicKey() public key is nil")
 	}
@@ -49,7 +49,7 @@ func TestLoadPrivateKeyPEM_SEC1(t *testing.T) {
 		t.Fatalf("LoadPrivateKeyPEM() unexpected error: %v", err)
 	}
 
-	loadedPublicKey := loadedKey.GetPublicKey()
+	loadedPublicKey := loadedKey.Public().Raw()
 	if loadedPublicKey == nil {
 		t.Fatalf("PrivateKey.GetPublicKey() public key is nil")
 	}
@@ -175,14 +175,14 @@ func TestKeys_FullRoundTrip(t *testing.T) {
 		t.Fatalf("LoadPrivateKeyPEM() error: %v", err)
 	}
 
-	cpk := loaded.GetCPK()
+	cpk := loaded.Public().CPK()
 
-	pubKey, err := cpk.Parse(loaded.Algorithm())
+	pubKey, err := cpk.Parse(loaded.Public().Algorithm())
 	if err != nil {
 		t.Fatalf("CPK.Parse() error: %v", err)
 	}
 
-	recovered, ok := pubKey.GetPublicKey().(*ecdsa.PublicKey)
+	recovered, ok := pubKey.Raw().(*ecdsa.PublicKey)
 	if !ok {
 		t.Fatalf("Public key is not ECDSA")
 	}

@@ -11,29 +11,43 @@ import (
 )
 
 func main() {
-	// generate an example ecdsa.PrivateKey (you would use your valid IOSS private key here)
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		panic(err)
 	}
-	// build a rtu.PrivateKey
-	privKey, err := rtu.NewECPrivateKey(key)
-	if err != nil {
-		panic(err)
-	}
-	// create your RTU payload
-	txID := "tx-id"
-	validUntil := time.Now().Add(time.Hour * 24 * 30)
-	payload := rtu.NewPayload(txID, validUntil).
-		SetDelegatedUse(false).
-		SetSellerName("Acme Corp")
-
-	// Sign the payload and generate the signed *rtu.PackedRTU object with Version 1
-	packedRtu, err := rtu.Sign(rtu.Version1, payload, privKey)
+	priv, err := rtu.NewECPrivateKey(key)
 	if err != nil {
 		panic(err)
 	}
 
-	// output your signed rtu
-	fmt.Println(packedRtu)
+	out := signASN(priv)
+
+	fmt.Println(out)
+}
+
+// change signASN with this function, to get a JWS Compact RTU with a 'jwk' header
+func signJWTWithJWK(priv rtu.PrivateKey) rtu.PackedRTU {
+	key, err := rtu.AddJWKToPrivateKey(priv)
+	if err != nil {
+		panic(err)
+	}
+	return signJWT(key)
+}
+
+// change signASN with this function, to get a JWS Compact RTU with a 'cpk' header
+func signJWT(priv rtu.PrivateKey) rtu.PackedRTU {
+	out, err := rtu.Sign(rtu.NewVersion1JWT("tx-id-001", time.Now().Add(time.Hour), false), priv)
+	if err != nil {
+		panic(err)
+	}
+	return out
+}
+
+// the QR code ready encoding for RTUs (ASN1 encoded RTU)
+func signASN(priv rtu.PrivateKey) rtu.PackedRTU {
+	out, err := rtu.Sign(rtu.NewVersion1ASN("tx-id-001", time.Now().Add(time.Hour), false), priv)
+	if err != nil {
+		panic(err)
+	}
+	return out
 }

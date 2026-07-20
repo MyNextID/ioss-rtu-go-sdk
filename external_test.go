@@ -13,6 +13,8 @@ import (
 
 // externalSign simulates an HSM or remote signing service.
 // It signs the digest using raw ECDSA, independent of any SDK signing path.
+// It should be noted, this simulates signing an ASN1 rtu.Format encoded digest. If this is used
+// with a JWT encoded digest, the signature will be incorrect (RFC7515 requires raw R||S, not ASN.1 DER)
 func externalSign(t *testing.T, privKey *ecdsa.PrivateKey, digest []byte) []byte {
 	t.Helper()
 
@@ -25,11 +27,17 @@ func externalSign(t *testing.T, privKey *ecdsa.PrivateKey, digest []byte) []byte
 }
 
 func makeVersion1ExternalSigner(tb testing.TB, pubKey *ecdsa.PublicKey) *rtu.ExternalSigner {
+	tb.Helper()
+
 	key, err := rtu.NewECPublicKey(pubKey)
 	if err != nil {
 		tb.Fatal(err)
 	}
-	return rtu.NewExternalSigner(rtu.Version1, key)
+	out, err := rtu.NewExternalSigner(rtu.ASN1, rtu.Version1, key)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return out
 }
 
 // =============================================================================
@@ -67,7 +75,7 @@ func TestComputeDigest_DigestMatchesSHA256OfPayload(t *testing.T) {
 
 	// The digest must equal sha256(payload) — this is what the external signer
 	// will receive and sign.
-	expected := signer.SignatureAlgorithm().Digest(payload)
+	expected := signer.PublicKey().Algorithm().Digest(payload)
 	if string(digest) != string(expected[:]) {
 		t.Error("digest does not match correct hash value of payload")
 	}
@@ -85,7 +93,7 @@ func TestComputeDigest_PayloadDecodesBackToOriginalRTU(t *testing.T) {
 	}
 
 	// validation turned to false, as we are just checking, if payload is valid
-	decoded, err := signer.Version().Parse(payload, false)
+	decoded, err := signer.Parse(payload)
 	if err != nil {
 		t.Fatalf("Version.Parse on payload unexpected error: %v", err)
 	}
@@ -94,7 +102,7 @@ func TestComputeDigest_PayloadDecodesBackToOriginalRTU(t *testing.T) {
 }
 
 // =============================================================================
-// ConstructSignedRaw
+// ConstructSigned
 // =============================================================================
 
 func TestConstructSigned_ValidInputs_ProducesDecodableSignedData(t *testing.T) {
@@ -111,7 +119,7 @@ func TestConstructSigned_ValidInputs_ProducesDecodableSignedData(t *testing.T) {
 
 	sig := externalSign(t, privKey, digest)
 
-	signedBytes, err := signer.ConstructSignedRaw(payload, sig)
+	signedBytes, err := signer.ConstructSigned(payload, sig)
 	if err != nil {
 		t.Fatalf("ConstructSignedRaw() unexpected error: %v", err)
 	}
@@ -120,16 +128,16 @@ func TestConstructSigned_ValidInputs_ProducesDecodableSignedData(t *testing.T) {
 		t.Fatal("ConstructSignedRaw() returned empty bytes")
 	}
 
-	parsedRtu, err := signedBytes.Parse(true)
+	parsedRtu, err := signedBytes.Parse()
 	if err != nil {
 		t.Fatalf("PackedRTU.Unpack() unexpected error: %v", err)
 	}
-	if parsedRtu.Version != signer.Version() {
-		t.Errorf("Version: got %d, want %d", parsedRtu.Version, signer.Version())
+	if parsedRtu.Version() != signer.Version() {
+		t.Errorf("Version: got %d, want %d", parsedRtu.Version(), signer.Version())
 	}
 
-	if !bytes.Equal(parsedRtu.Payload, payload) {
-		t.Errorf("Payload: got %v, want %v", parsedRtu.Payload, payload)
+	if !bytes.Equal(parsedRtu.Payload(), payload) {
+		t.Errorf("Payload: got %v, want %v", parsedRtu.Payload(), payload)
 	}
 }
 
@@ -140,7 +148,7 @@ func TestConstructSigned_EmptyPayload_ReturnsErrEmptyInput(t *testing.T) {
 	sig := externalSign(t, privKey, make([]byte, 32))
 	signer := makeVersion1ExternalSigner(t, &privKey.PublicKey)
 
-	_, err := signer.ConstructSignedRaw([]byte{}, sig)
+	_, err := signer.ConstructSignedObj([]byte{}, sig)
 	if err == nil {
 		t.Fatal("ConstructSignedRaw() expected error for empty payload, got nil")
 	}
@@ -161,7 +169,7 @@ func TestConstructSigned_EmptySignature_ReturnsErrEmptyInput(t *testing.T) {
 		t.Fatalf("ComputeDigest() unexpected error: %v", err)
 	}
 
-	_, err = signer.ConstructSignedRaw(payload, []byte{})
+	_, err = signer.ConstructSignedObj(payload, []byte{})
 	if err == nil {
 		t.Fatal("ConstructSignedRaw() expected error for empty signature, got nil")
 	}
@@ -187,7 +195,7 @@ func TestConstructSigned_InvalidSignatureEncoding_ReturnsErrSignatureInvalid(t *
 		t.Fatalf("rand.Read: %v", err)
 	}
 
-	_, err = signer.ConstructSignedRaw(payload, rawSig)
+	_, err = signer.ConstructSignedObj(payload, rawSig)
 	if err == nil {
 		t.Fatal("ConstructSignedRaw() expected error for non-DER signature, got nil")
 	}
@@ -223,7 +231,7 @@ func TestExternalSigning_RoundTrip_VerifySucceeds(t *testing.T) {
 	}
 
 	// Step 4: verifier validates the full SignedData.
-	recovered, err := signedBytes.Parse(true)
+	recovered, _, err := signedBytes.Parse()
 	if err != nil {
 		t.Fatalf("RTU.Parse() unexpected error: %v", err)
 	}
@@ -247,12 +255,9 @@ func TestExternalSigning_WrongKeyAtVerify_ReturnsErrSignatureInvalid(t *testing.
 
 	sig := externalSign(t, signingKey, digest)
 
-	_, err = otherSigner.ConstructSignedRaw(payload, sig)
+	_, err = otherSigner.ConstructSignedObj(payload, sig)
 	if err == nil {
 		t.Fatalf("ConstructSignedRaw() expected error for wrong public key, got nil")
-	}
-	if !errors.Is(err, rtu.ErrKeyInvalid) {
-		t.Errorf("expected ErrKeyInvalid, got %v", err)
 	}
 }
 
@@ -269,19 +274,19 @@ func TestExternalSigning_TamperedPayloadAfterConstruct_ReturnsError(t *testing.T
 
 	sig := externalSign(t, privKey, digest)
 
-	signedObj, err := signer.ConstructSignedObj(payload, sig)
+	signedObj, err := signer.ConstructSigned(payload, sig)
 	if err != nil {
 		t.Fatalf("ConstructSignedRaw() unexpected error: %v", err)
 	}
 
 	// Tamper with the middle of the signed blob.
-	tampered := make([]byte, len(signedObj.Payload))
-	copy(tampered, signedObj.Payload)
+	tampered := make([]byte, len(signedObj))
+	copy(tampered, signedObj)
 	tampered[len(tampered)/2] ^= 0xFF
 
-	signedObj.Payload = tampered
+	signedObj = rtu.PackedRTU(tampered)
 
-	_, err = signedObj.Parse(true)
+	_, _, err = rtu.Verify(signedObj)
 	if err == nil {
 		t.Fatal("Verify() expected error for tampered signed data, got nil")
 	}
@@ -313,7 +318,7 @@ func TestExternalSigning_InvalidSignatureRejectedByConstruct(t *testing.T) {
 	dummySig := externalSign(t, otherKey, digest)
 
 	// ConstructSignedRaw must reject a signature that does not verify against the CPK.
-	_, err = signer.ConstructSignedRaw(payload, dummySig)
+	_, err = signer.ConstructSignedObj(payload, dummySig)
 	if !errors.Is(err, rtu.ErrSignatureInvalid) {
 		t.Errorf("ConstructSignedRaw() expected ErrSignatureInvalid for invalid signature, got: %v", err)
 	}

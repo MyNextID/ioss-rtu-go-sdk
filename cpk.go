@@ -3,6 +3,7 @@ package rtu
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"encoding/base64"
 	"fmt"
 )
 
@@ -20,9 +21,8 @@ func NewCPK(pubKey any, algorithm SignatureAlgorithm) (CPK, error) {
 				return nil, fmt.Errorf("%s expects ecdsa.GetPublicKey from P-256 curve, not %s: %w", algorithm, key.Curve, ErrCPKUnsupported)
 			}
 			return elliptic.MarshalCompressed(key.Curve, key.X, key.Y), nil
-		} else {
-			return nil, fmt.Errorf("%s expects *ecdsa.GetPublicKey: %w", algorithm, ErrKeyInvalid)
 		}
+		return nil, fmt.Errorf("%s expects *ecdsa.GetPublicKey: %w", algorithm, ErrKeyInvalid)
 	default:
 		return nil, fmt.Errorf("unknown signature algorithm: %s: %w", algorithm, ErrCPKUnsupported)
 	}
@@ -32,16 +32,36 @@ func NewCPK(pubKey any, algorithm SignatureAlgorithm) (CPK, error) {
 func (c CPK) Parse(algorithm SignatureAlgorithm) (PublicKey, error) {
 	switch algorithm {
 	case AlgorithmEcdsaP256:
-		x, y := elliptic.UnmarshalCompressed(elliptic.P256(), c)
-		if x == nil {
-			return PublicKey{}, fmt.Errorf("%s failed to unmarshal cpk: %w", algorithm, ErrKeyInvalid)
-		}
-		return newPublicKey(&ecdsa.PublicKey{
-			Curve: elliptic.P256(),
-			X:     x,
-			Y:     y,
-		}, algorithm, c)
+		return validateEcdsaP256CPK(c)
 	default:
-		return PublicKey{}, fmt.Errorf("unknown signature algorithm: %s: %w", algorithm, ErrCPKUnsupported)
+		return nil, NewValidationError(ValidationFieldCPK, fmt.Errorf("unsupported signature algorithm: %s", algorithm))
 	}
+}
+
+// Pack encodes this CPK to a PackedCPK (used in JWT encoded 'cpk' field, as it is a string not a byte array)
+func (c CPK) Pack() PackedCPK {
+	return PackedCPK(base64.RawURLEncoding.EncodeToString(c))
+}
+
+// PackedCPK is a base64url encoded representation of a CPK
+type PackedCPK string
+
+// CPK tries to base64url decode the PackedCPK and returns the CPK if successful.
+// The returned CPK should not be considered to be "valid", until it has been parsed via CPK.Parse with its
+// corresponding SignatureAlgorithm
+func (p PackedCPK) CPK() (CPK, error) {
+	out, err := base64.RawURLEncoding.DecodeString(string(p))
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to decode PackedCPK", ErrDecoding)
+	}
+	return out, nil
+}
+
+// PublicKey decodes the PackedCPK and parses it, to get the PublicKey directly
+func (p PackedCPK) PublicKey(algorithm SignatureAlgorithm) (PublicKey, error) {
+	temp, err := p.CPK()
+	if err != nil {
+		return nil, err
+	}
+	return temp.Parse(algorithm)
 }

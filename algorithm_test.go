@@ -37,16 +37,16 @@ func TestAlgorithmEcdsaP256_VerifyValidSignature(t *testing.T) {
 
 	payload := []byte{0}
 
-	signature, err := priv.Sign(rand.Reader, payload)
+	rtuType := helpers.GetASN1Type()
+
+	signature, err := priv.Sign(rtuType, rand.Reader, payload)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	verified, err := priv.Verify(payload, signature)
+	err = priv.Public().Verify(rtuType, payload, signature)
 	if err != nil {
 		t.Errorf("Verify() unexepected error, got %v", err)
-	} else if !verified {
-		t.Errorf("Verify() signature should be valid")
 	}
 }
 
@@ -60,7 +60,9 @@ func TestAlgorithmEcdsaP256_VerifyInvalidSignature(t *testing.T) {
 
 	payload := []byte{0}
 
-	signature, err := priv.Sign(rand.Reader, payload)
+	rtuType := helpers.GetASN1Type()
+
+	signature, err := priv.Sign(rtuType, rand.Reader, payload)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,10 +70,8 @@ func TestAlgorithmEcdsaP256_VerifyInvalidSignature(t *testing.T) {
 	// tamper with signature
 	signature[len(signature)/2] ^= 0xFF
 
-	verified, err := priv.Verify(payload, signature)
-	if err != nil {
-		t.Errorf("Verify() unexepected error, got %v", err)
-	} else if verified {
-		t.Errorf("Verify() signature should be invalid")
+	err = priv.Public().Verify(rtuType, payload, signature)
+	if err == nil {
+		t.Errorf("Verify() expected error")
 	}
 }

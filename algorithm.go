@@ -2,12 +2,29 @@ package rtu
 
 import (
 	"crypto/sha256"
+	"fmt"
+
+	"github.com/lestrrat-go/jwx/v3/jwa"
 )
 
 type SignatureAlgorithm string
 
+// ParseJwa takes a jwa.SignatureAlgorithm and parses a SignatureAlgorithm. (example "ES256" -> "ecdsa-p256")
+func ParseJwa(alg jwa.SignatureAlgorithm) (SignatureAlgorithm, error) {
+	switch alg {
+	case jwa.EmptySignatureAlgorithm():
+		return AlgorithmNone, nil
+	case jwa.ES256():
+		return AlgorithmEcdsaP256, nil
+	default:
+		return AlgorithmNone, fmt.Errorf("%w: unknown jwa algorithm: %s", ErrUnknownSignatureAlgorithm, alg)
+	}
+}
+
 const (
-	AlgorithmNone      SignatureAlgorithm = ""
+	// AlgorithmNone is used when there is no algorithm given in the RTU
+	AlgorithmNone SignatureAlgorithm = ""
+	// AlgorithmEcdsaP256 is the signature algorithm for ECDSA with P-256 curve, signing a SHA256 hash.
 	AlgorithmEcdsaP256 SignatureAlgorithm = "ecdsa-p256"
 )
 
@@ -15,12 +32,35 @@ const (
 // if returned value is nil, it should be treated the same as an ErrSignatureAlgorithmInvalid.
 func (s SignatureAlgorithm) Digest(payload []byte) []byte {
 	switch s {
-	case AlgorithmNone:
-		return nil
 	case AlgorithmEcdsaP256:
-		hash := sha256.Sum256(payload)
-		return hash[:]
+		hash := sha256.New()
+		hash.Write(payload)
+		return hash.Sum(nil)
 	default:
 		return nil
+	}
+}
+
+// Validate validates the SignatureAlgorithm, to ensure this library supports it fully
+func (s SignatureAlgorithm) Validate() error {
+	switch s {
+	case AlgorithmNone:
+		return ErrNoSignatureAlgorithm
+	case AlgorithmEcdsaP256:
+		return nil
+	default:
+		return fmt.Errorf("%w: %s", ErrUnknownSignatureAlgorithm, s)
+	}
+}
+
+// ToJWA returns the JSON Web Token Algorithm string for the given SignatureAlgorithm
+func (s SignatureAlgorithm) ToJWA() (jwa.SignatureAlgorithm, error) {
+	switch s {
+	case AlgorithmNone:
+		return jwa.EmptySignatureAlgorithm(), ErrNoSignatureAlgorithm
+	case AlgorithmEcdsaP256:
+		return jwa.ES256(), nil
+	default:
+		return jwa.EmptySignatureAlgorithm(), fmt.Errorf("%w: %s", ErrUnknownSignatureAlgorithm, s)
 	}
 }

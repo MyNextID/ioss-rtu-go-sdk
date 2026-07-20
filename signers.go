@@ -2,44 +2,72 @@ package rtu
 
 import (
 	"crypto/rand"
-	"fmt"
 )
 
-type Signer func(payload *Payload, key *PrivateKey) (*RTU, error)
-
-// Sign uses the given Version to generate an RTU object, then packs it and returns a PackedRTU
-func Sign(version Version, payload *Payload, key *PrivateKey) (PackedRTU, error) {
-	signer, err := version.Signer()
+// Sign wraps SignRaw, but returns the PackedRTU instead of the RTU object
+func Sign(payload UnsignedPayload, key PrivateKey, opts ...SignOption) (PackedRTU, error) {
+	obj, err := SignRaw(payload, key, opts...)
 	if err != nil {
-		return "", err
+		return "", nil
 	}
-	obj, err := signer(payload, key)
-	if err != nil {
-		return "", err
-	}
+	// pack the object into a string
 	return obj.Pack()
 }
 
-// signV1 signs the given Payload object with ECDSA-P256 and creates a
-// Version1 RTU object.
-func signV1(payload *Payload, key *PrivateKey) (*RTU, error) {
-	if key.Algorithm() != AlgorithmEcdsaP256 {
-		return nil, fmt.Errorf("version 1 only support ecdsa-p256 private keys: %w", ErrKeyInvalid)
-	}
-	raw, err := Version1.Make(payload.SetCPK(key.GetCPK()))
+// SignRaw uses the UnsignedPayload given and signs it with the PrivateKey
+// (it also sets the publicKey to the payload, validates the payload (unless WithoutSignValidation is given as an option)
+// and returns the signed RTU object
+func SignRaw(payload UnsignedPayload, key PrivateKey, opts ...SignOption) (RTU, error) {
+	// set the PublicKey to the payload
+	finalPayload, err := payload.SetPublicKey(key.Public())
 	if err != nil {
 		return nil, err
 	}
-	out := &RTU{
-		Version:   Version1,
-		Payload:   raw,
-		Signature: nil,
-		Algorithm: AlgorithmNone,
+	if !hasSignOption[*signWithoutValidating](opts) {
+		err = ValidatePayload(finalPayload)
+		if err != nil {
+			return nil, err
+		}
 	}
-	signature, err := key.Sign(rand.Reader, raw)
+	// Marshal and output the raw bytes of the payload (to be signed)
+	raw, err := finalPayload.Marshal()
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrSigning, err)
+		return nil, err
 	}
-	out.Signature = signature
-	return out, nil
+	// use the PrivateKey to sign the payload with the given format
+	signature, err := key.Sign(payload, rand.Reader, raw)
+	if err != nil {
+		return nil, err
+	}
+	// create the RTU object
+	obj, err := makeRTU(finalPayload, raw, signature)
+	if err != nil {
+		return nil, err
+	}
+	return obj, nil
+}
+
+type SignOption interface {
+	optArgs() any
+}
+
+type signWithoutValidating struct{}
+
+func (*signWithoutValidating) optArgs() any { return nil }
+
+func WithoutSignValidation() SignOption {
+	return &signWithoutValidating{}
+}
+
+func hasSignOption[T any](opts []SignOption) bool {
+	return getSignOption[T](opts) != nil
+}
+
+func getSignOption[T any](opts []SignOption) SignOption {
+	for _, opt := range opts {
+		if _, ok := opt.(T); ok {
+			return opt
+		}
+	}
+	return nil
 }

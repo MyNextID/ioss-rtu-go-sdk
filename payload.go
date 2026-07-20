@@ -1,107 +1,54 @@
 package rtu
 
 import (
+	"fmt"
 	"time"
 )
 
-// Payload is the structureless data container for all versions of RTU
-type Payload struct {
-	// required info across all versions rtus
-	validUntil    time.Time
-	transactionID string
-
-	// cpk not nil means, this payload was signed.
-	// it should be set by signers, before Version.Make is called
-	cpk CPK
-
-	// optional keys
-	delegatedUse      *bool
-	sellerName        *string
-	sellerAddr        *string
-	limitDeliveryArea *string
-	consignmentIDs    []string
-	limitConsignments *int
+// Type is an interface, that allows PrivateKey.Sign and PublicKey.Verify to know the metadata for their signature.
+type Type interface {
+	Format() Format
+	Version() Version
 }
 
-// NewPayload creates an empty payload, with TransactionID and ValidUntil set (the bare minimum)
-func NewPayload(txID string, validUntil time.Time) *Payload {
-	return &Payload{
-		validUntil:    validUntil.UTC().Truncate(time.Second),
-		transactionID: txID,
+// Payload is an interface allowing reading of the RTU payload
+type Payload interface {
+	Type
+
+	ValidUntil() time.Time
+	TransactionID() *string
+	DelegatedUse() *bool
+	SellerName() *string
+	SellerAddress() *string
+	LimitDeliveryArea() *string
+	Consignments() []string
+	LimitConsignments() *int
+}
+
+type UnsignedPayload interface {
+	Payload
+	// Marshal creates a byte array of this payload (to be signed)
+	Marshal() ([]byte, error)
+
+	PublicKey() PublicKey
+	SetPublicKey(pk PublicKey) (UnsignedPayload, error)
+	SetValidUntil(t time.Time) UnsignedPayload
+	SetTransactionID(transactionID string) UnsignedPayload
+	SetDelegatedUse(d bool) UnsignedPayload
+	SetSellerName(s string) UnsignedPayload
+	SetSellerAddress(s string) UnsignedPayload
+	SetLimitDeliveryArea(s string) UnsignedPayload
+	SetConsignmentIDs(ids []string) UnsignedPayload
+	SetLimitConsignments(l int) UnsignedPayload
+}
+
+func New(format Format, version Version) (UnsignedPayload, error) {
+	switch format {
+	case JWT:
+		return newJWT(version), nil
+	case ASN1:
+		return newASN1(version), nil
+	default:
+		return nil, fmt.Errorf("%w: %s", ErrUnknownFormat, format)
 	}
-}
-
-func (p *Payload) TransactionID() string {
-	return p.transactionID
-}
-
-func (p *Payload) CPK() CPK {
-	return p.cpk
-}
-
-func (p *Payload) SetCPK(cpk CPK) *Payload {
-	p.cpk = cpk
-	return p
-}
-
-func (p *Payload) IsExpired() bool {
-	return p.validUntil.Before(time.Now())
-}
-
-func (p *Payload) ValidUntil() time.Time {
-	return p.validUntil
-}
-
-func (p *Payload) DelegatedUse() *bool {
-	return p.delegatedUse
-}
-
-func (p *Payload) SetDelegatedUse(delegatedUse bool) *Payload {
-	p.delegatedUse = &delegatedUse
-	return p
-}
-
-func (p *Payload) SellerName() *string {
-	return p.sellerName
-}
-
-func (p *Payload) SetSellerName(sellerName string) *Payload {
-	p.sellerName = &sellerName
-	return p
-}
-
-func (p *Payload) SellerAddress() *string {
-	return p.sellerAddr
-}
-
-func (p *Payload) SetSellerAddress(sellerAddr string) *Payload {
-	p.sellerAddr = &sellerAddr
-	return p
-}
-
-func (p *Payload) LimitDeliveryArea() *string {
-	return p.limitDeliveryArea
-}
-
-func (p *Payload) SetLimitDeliveryArea(limitDeliveryArea string) *Payload {
-	p.limitDeliveryArea = &limitDeliveryArea
-	return p
-}
-
-func (p *Payload) LimitConsignments() *int {
-	return p.limitConsignments
-}
-
-func (p *Payload) SetLimitConsignments(limitConsignments int) *Payload {
-	p.limitConsignments = &limitConsignments
-	return p
-}
-
-func (p *Payload) Consignments() []string {
-	return p.consignmentIDs
-}
-
-func (p *Payload) SetConsignments(consignmentIDs []string) *Payload {
-	p.consignmentIDs = consignmentIDs
-	return p
 }

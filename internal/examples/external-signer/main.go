@@ -16,19 +16,23 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
 	// build a rtu.PublicKey for our *rtu.ExternalSigner
 	pubKey, err := rtu.NewECPublicKey(&externalKey.PublicKey)
 	if err != nil {
 		panic(err)
 	}
+
 	// create your RTU payload
 	txID := "tx-id"
 	validUntil := time.Now().Add(time.Hour * 24 * 30)
-	payload := rtu.NewPayload(txID, validUntil).
-		SetDelegatedUse(false).
+	payload := rtu.NewVersion1ASN(txID, validUntil, false).
 		SetSellerName("Acme Corp")
 	// we create our external signer, only the publicKey is needed
-	signer := rtu.NewExternalSigner(rtu.Version1, pubKey)
+	signer, err := rtu.NewExternalSigner(rtu.ASN1, rtu.Version1, pubKey)
+	if err != nil {
+		panic(err)
+	}
 	digest, rawPayload, err := signer.ComputeDigest(payload)
 	if err != nil {
 		panic(err)
