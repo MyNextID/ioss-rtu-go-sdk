@@ -29,6 +29,9 @@ var (
 	ErrUnknownFormat             = errors.New("unknown format")
 	ErrNoFormat                  = errors.New("no format")
 	ErrEmptyInput                = errors.New("empty input")
+
+	ErrInvalidIDLength   = errors.New("invalid ID length")
+	ErrUnknownRefVersion = errors.New("unknown ref version")
 )
 
 // ValidationError carries per-field details
