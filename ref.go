@@ -134,14 +134,14 @@ func (r Ref) Version() RefVersion {
 	return RefUnknown
 }
 
-// IsSame is used to determine, if our Ref is for the same RTU as the given Ref. Refs used the first X bytes
+// Equals is used to determine, if our Ref is for the same RTU as the given Ref. Refs used the first X bytes
 // of a SHA256 hash.
 //
 // By normalizing both byte arrays, to be of same length, we can determine (but not prove)
 // that the Refs were created from the same RTU
 //
 // (if RefV1 is used, there are some small chances that 2 RTUs have the same Ref)
-func (r Ref) IsSame(other Ref) bool {
+func (r Ref) Equals(other Ref) bool {
 	rB := r.Bytes()
 	otherB := other.Bytes()
 	if len(rB) == 0 || len(otherB) == 0 {

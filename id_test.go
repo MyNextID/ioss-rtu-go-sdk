@@ -52,7 +52,7 @@ func TestID_AsRef(t *testing.T) {
 		t.Fatalf("AsRef() for RefV2 returned wrong ref, %s != %s", v2, actualV2)
 	}
 
-	if !v1.IsSame(v2) {
+	if !v1.Equals(v2) {
 		t.Fatalf("AsRef() for RefV1 returned ref, that is not for the same RTU as RefV2")
 	}
 }

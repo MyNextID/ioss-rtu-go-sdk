@@ -65,10 +65,10 @@ func TestRef_IsSame(t *testing.T) {
 		t.Fatalf("RefV1 and RefV2 should not be the same")
 	}
 
-	if !refV1.IsSame(refV2) {
+	if !refV1.Equals(refV2) {
 		t.Fatalf("RefV1 and RefV2 are from same RTU, but IsSame returned false")
 	}
-	if !refV2.IsSame(refV1) {
+	if !refV2.Equals(refV1) {
 		t.Fatalf("RefV1 and RefV2 are from same RTU, but IsSame returned false")
 	}
 }
