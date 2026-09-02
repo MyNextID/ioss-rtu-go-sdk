@@ -8,7 +8,7 @@ import (
 func Sign(payload UnsignedPayload, key PrivateKey, opts ...SignOption) (PackedRTU, error) {
 	obj, err := SignRaw(payload, key, opts...)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	// pack the object into a string
 	return obj.Pack()
